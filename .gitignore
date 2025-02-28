@@ -46,4 +46,5 @@ tmp/
 scraper.py
 translate_names.py
 app.yaml
+app_local.py
 

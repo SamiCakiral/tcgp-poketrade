@@ -47,4 +47,22 @@
     {% endif %}
     
     <p><a href="{{ url_for('search') }}" class="button">Nouvelle recherche</a></p>
+
+    <style>
+        @media (max-width: 768px) {
+            .card-details {
+                flex-direction: column;
+                padding: 20px;
+            }
+            
+            .card-details .card-image {
+                width: 100%;
+                margin-bottom: 15px;
+            }
+            
+            .users-list li {
+                padding: 12px 10px;
+            }
+        }
+    </style>
 {% endblock %} 

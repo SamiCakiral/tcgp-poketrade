@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="delete-account-container">
+        <h1>Supprimer votre compte</h1>
+        
+        <div class="warning-box">
+            <p><strong>Attention :</strong> Cette action est irréversible. Toutes vos données seront définitivement supprimées.</p>
+        </div>
+        
+        <p>En supprimant votre compte :</p>
+        <ul>
+            <li>Toutes vos cartes en trop seront supprimées</li>
+            <li>Votre liste de cartes recherchées sera supprimée</li>
+            <li>Vos informations personnelles seront supprimées</li>
+        </ul>
+        
+        <div class="confirm-actions">
+            <form method="post">
+                <button type="submit" class="danger-button">Confirmer la suppression</button>
+            </form>
+            <a href="{{ url_for('dashboard') }}" class="button secondary-button">Annuler</a>
+        </div>
+    </div>
+    
+    <style>
+        .delete-account-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .warning-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .confirm-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        
+        .danger-button {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .danger-button:hover {
+            background-color: #e04c49;
+        }
+    </style>
+{% endblock %} 

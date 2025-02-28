@@ -2,17 +2,177 @@
 
 {% block content %}
     <h1>Rechercher une carte</h1>
-    <form method="post">
-        <div>
-            <label for="set_id">Série (ex: A1, A2a):</label>
-            <input type="text" id="set_id" name="set_id" required>
+    
+    <div class="search-container">
+        <form method="post" id="search-form">
+            <div>
+                <label for="set_id">Série (ex: A1, A2a):</label>
+                <select id="set_id" name="set_id" required>
+                    <option value="A1">A1 (Puissance Génétique)</option>
+                    <option value="A2a">A1a (Ile Fabuleuse)</option>
+                    <option value="A2b">A2 (Choc Spatio-Temporelle)</option>
+                    <option value="A2c">A2a (Lumière Triomphale)</option>
+                </select>
+            </div>
+            <div>
+                <label for="card_number">Numéro de carte:</label>
+                <input type="number" id="card_number" name="card_number" required>
+            </div>
+            <button type="submit" class="search-button">Rechercher</button>
+        </form>
+        
+        <div class="card-preview" id="card-preview">
+            <div class="preview-placeholder">
+                <p>Entrez un numéro de série et de carte pour voir l'aperçu</p>
+            </div>
+            <div class="preview-content" style="display: none;">
+                <h3 id="preview-title"></h3>
+                <p id="preview-original-name" class="card-original-name"></p>
+                <div class="card-image">
+                    <img id="preview-image" src="" alt="Aperçu de la carte">
+                </div>
+            </div>
         </div>
-        <div>
-            <label for="card_number">Numéro de carte:</label>
-            <input type="number" id="card_number" name="card_number" required>
-        </div>
-        <div>
-            <button type="submit">Rechercher</button>
-        </div>
-    </form>
+    </div>
+    
+    <style>
+        .search-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 50px;
+        }
+        
+        .card-preview {
+            padding: 30px;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 300px;
+        }
+        
+        .preview-placeholder {
+            text-align: center;
+            color: #718096;
+        }
+        
+        .preview-content {
+            text-align: center;
+        }
+        
+        select {
+            padding: 12px 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            width: 100%;
+            margin-bottom: 20px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.95rem;
+            transition: var(--transition);
+            background-color: white;
+        }
+        
+        select:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(93, 111, 211, 0.2);
+        }
+        
+        .search-button {
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .search-container {
+                grid-template-columns: 1fr;
+                gap: 25px;
+            }
+            
+            .card-preview {
+                order: -1;
+                min-height: 250px;
+            }
+            
+            .search-button {
+                width: 100%;
+                margin-top: 15px;
+                padding: 14px 20px;
+            }
+        }
+    </style>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const setIdInput = document.getElementById('set_id');
+            const cardNumberInput = document.getElementById('card_number');
+            const previewPlaceholder = document.querySelector('.preview-placeholder');
+            const previewContent = document.querySelector('.preview-content');
+            const previewTitle = document.getElementById('preview-title');
+            const previewOriginalName = document.getElementById('preview-original-name');
+            const previewImage = document.getElementById('preview-image');
+            
+            // Fonction pour mettre à jour l'aperçu
+            function updatePreview() {
+                const setId = setIdInput.value;
+                const cardNumber = cardNumberInput.value;
+                
+                if (setId && cardNumber) {
+                    fetch(`/card_info?set_id=${setId}&card_number=${cardNumber}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.exists) {
+                                previewPlaceholder.style.display = 'none';
+                                previewContent.style.display = 'block';
+                                
+                                // Mettre à jour le titre
+                                const displayName = data.french_name || data.card_name;
+                                previewTitle.textContent = `${data.set_id}-${data.card_number}: ${displayName}`;
+                                
+                                // Afficher le nom original si nécessaire
+                                if (data.french_name && data.french_name !== data.card_name) {
+                                    previewOriginalName.textContent = `(${data.card_name})`;
+                                    previewOriginalName.style.display = 'block';
+                                } else {
+                                    previewOriginalName.style.display = 'none';
+                                }
+                                
+                                // Mettre à jour l'image
+                                if (data.image_url) {
+                                    previewImage.src = data.image_url;
+                                    previewImage.style.display = 'block';
+                                } else {
+                                    previewImage.style.display = 'none';
+                                }
+                            } else {
+                                previewPlaceholder.style.display = 'block';
+                                previewContent.style.display = 'none';
+                                previewPlaceholder.innerHTML = '<p>Carte non trouvée</p>';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erreur:', error);
+                            previewPlaceholder.style.display = 'block';
+                            previewContent.style.display = 'none';
+                            previewPlaceholder.innerHTML = '<p>Erreur lors du chargement de l\'aperçu</p>';
+                        });
+                } else {
+                    previewPlaceholder.style.display = 'block';
+                    previewContent.style.display = 'none';
+                    previewPlaceholder.innerHTML = '<p>Entrez un numéro de série et de carte pour voir l\'aperçu</p>';
+                }
+            }
+            
+            // Mettre à jour l'aperçu quand les champs changent
+            setIdInput.addEventListener('change', updatePreview);
+            cardNumberInput.addEventListener('input', updatePreview);
+            
+            // Vérification initiale
+            if (cardNumberInput.value) {
+                updatePreview();
+            }
+        });
+    </script>
 {% endblock %} 

@@ -3,7 +3,7 @@
 <head>
     <title>Échange de Cartes Pokémon</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -85,7 +85,7 @@
         .container { 
             max-width: 1200px; 
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 30px;
         }
         
         h1, h2, h3 {
@@ -126,19 +126,19 @@
             background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 12px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-            font-size: 0.95rem;
-            transition: var(--transition);
+            padding: 10px 20px;
+            border-radius: 8px;
             font-family: 'Poppins', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         button:hover, .button:hover, input[type="submit"]:hover {
-            background-color: #4958b5;
+            background-color: #4a5bb8;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
         
         input[type="text"], input[type="date"], input[type="number"] {
@@ -160,15 +160,15 @@
         
         .card-list { 
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 25px;
-            margin: 25px 0;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 30px;
+            margin: 30px 0;
         }
         
         .card-item { 
             border: none;
             border-radius: 12px;
-            padding: 20px;
+            padding: 25px;
             background-color: white;
             box-shadow: var(--card-shadow);
             transition: var(--transition);
@@ -210,7 +210,7 @@
         }
         
         form div {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
         
         label {
@@ -221,11 +221,12 @@
         }
         
         .secondary-button {
-            background-color: var(--secondary-color);
+            background-color: #e2e8f0;
+            color: var(--dark-color);
         }
         
         .secondary-button:hover {
-            background-color: #3dbcb4;
+            background-color: #cbd5e0;
         }
         
         .accent-button {
@@ -324,6 +325,81 @@
         .radio-group input[type="radio"] {
             margin-right: 10px;
         }
+        
+        .danger-button {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        
+        .danger-button:hover {
+            background-color: #e04c49;
+        }
+        
+        .view-toggle button {
+            background: #f1f5f9;
+            color: var(--dark-color);
+            border-radius: 0;
+            box-shadow: none;
+        }
+        
+        .view-toggle button.active {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        /* Ajout d'un style mobile pour la navigation */
+        @media (max-width: 768px) {
+            nav .container {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            nav .nav-links {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                width: 100%;
+                gap: 10px;
+            }
+            
+            nav a {
+                text-align: center;
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .card-list {
+                grid-template-columns: 1fr;
+            }
+            
+            .card-item {
+                max-width: 100%;
+            }
+            
+            .flash-messages {
+                padding: 12px 15px;
+            }
+            
+            form div {
+                margin-bottom: 20px;
+            }
+            
+            input[type="text"], input[type="date"], input[type="number"] {
+                padding: 14px 15px; /* Augmenté pour faciliter la saisie tactile */
+            }
+            
+            button, .button, input[type="submit"] {
+                width: 100%;
+                padding: 14px 20px;
+                font-size: 1rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -360,7 +436,7 @@
     
     <footer>
         <div class="container">
-            <p>Système d'échange de cartes Pokémon - Créé pour les amis</p>
+            <p>Système d'échange de cartes Pokémon - Créé pour les amis (Par Sami aka le meilleur être humain de cette planète) - <a href="https://github.com/SamiCakiral/tcgp-poketrade">Github</a></p>
         </div>
     </footer>
 </body>
