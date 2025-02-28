@@ -1,0 +1,49 @@
+__pycache__
+A1.webp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment
+venv/
+ENV/
+.env
+
+# Local DB
+pokemon_cards.db
+
+# Google Cloud service account
+*.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temp files
+tmp/
+
+scraper.py
+translate_names.py
+app.yaml
+

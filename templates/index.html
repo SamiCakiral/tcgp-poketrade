@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="home-container">
+        <div class="home-header">
+            <h1>Système d'Échange de Cartes Pokémon</h1>
+            <p class="subtitle">Trouvez et échangez des cartes entre amis facilement</p>
+        </div>
+        
+        <div class="features">
+            <div class="feature-card" onclick="window.location.href='{{ url_for('add_card') }}'">
+                <div class="feature-icon">📋</div>
+                <h3>Gérez votre collection</h3>
+                <p>Enregistrez les cartes que vous avez en trop ou que vous recherchez</p>
+            </div>
+            
+            <div class="feature-card" onclick="window.location.href='{{ url_for('search') }}'">
+                <div class="feature-icon">🔍</div>
+                <h3>Recherchez des cartes</h3>
+                <p>Trouvez facilement qui a les cartes que vous voulez</p>
+            </div>
+            
+            <div class="feature-card" onclick="window.location.href='{{ url_for('dashboard') }}'">
+                <div class="feature-icon">🔄</div>
+                <h3>Échangez avec vos amis</h3>
+                <p>Facilitez vos échanges grâce à notre système simple</p>
+            </div>
+        </div>
+        
+        {% if not session.get('user_id') %}
+            <div class="cta-buttons">
+                <a href="{{ url_for('register') }}" class="button">Inscrivez-vous</a>
+                <a href="{{ url_for('login') }}" class="button secondary-button">Connectez-vous</a>
+            </div>
+        {% else %}
+            <div class="cta-buttons">
+                <a href="{{ url_for('dashboard') }}" class="button">Allez à votre tableau de bord</a>
+                <a href="{{ url_for('search') }}" class="button secondary-button">Recherchez une carte</a>
+            </div>
+        {% endif %}
+    </div>
+    
+    <style>
+        .home-container {
+            text-align: center;
+            padding: 20px 0 60px;
+        }
+        
+        .home-header {
+            margin-bottom: 60px;
+        }
+        
+        .subtitle {
+            font-size: 1.3rem;
+            color: #718096;
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 35px;
+            margin: 50px 0;
+        }
+        
+        .cta-buttons {
+            margin-top: 60px;
+        }
+        
+        .button {
+            display: inline-block;
+            margin: 0 10px;
+            padding: 14px 28px;
+            font-size: 1.1rem;
+            text-decoration: none;
+        }
+    </style>
+{% endblock %} 

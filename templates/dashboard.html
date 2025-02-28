@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Tableau de bord</h1>
+    
+    <h2>Vos cartes en trop</h2>
+    {% if extra_cards %}
+        <div class="card-list">
+            {% for card in extra_cards %}
+                <div class="card-item">
+                    {% if card.image_url %}
+                        <div class="card-image">
+                            <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
+                        </div>
+                    {% endif %}
+                    <h3>{{ card.set_id }}-{{ card.card_number }}: {{ card.french_name or card.card_name }}</h3>
+                    {% if card.french_name and card.french_name != card.card_name %}
+                        <p class="card-original-name">({{ card.card_name }})</p>
+                    {% endif %}
+                    <p>Quantité: {{ card.quantity }}</p>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>Vous n'avez pas encore ajouté de cartes en trop.</p>
+    {% endif %}
+    
+    <h2>Cartes que vous recherchez</h2>
+    {% if wanted_cards %}
+        <div class="card-list">
+            {% for card in wanted_cards %}
+                <div class="card-item">
+                    {% if card.image_url %}
+                        <div class="card-image">
+                            <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
+                        </div>
+                    {% endif %}
+                    <h3>{{ card.set_id }}-{{ card.card_number }}: {{ card.french_name or card.card_name }}</h3>
+                    {% if card.french_name and card.french_name != card.card_name %}
+                        <p class="card-original-name">({{ card.card_name }})</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>Vous ne recherchez pas encore de cartes.</p>
+    {% endif %}
+    
+    <p><a href="{{ url_for('add_card') }}" class="button">Ajouter une carte</a></p>
+{% endblock %} 

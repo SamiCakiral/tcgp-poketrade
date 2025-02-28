@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Résultats de recherche</h1>
+    
+    {% if card %}
+        <div class="card-details">
+            <div class="card-header">
+                <h2>{{ card.set_id }}-{{ card.card_number }}: {{ card.french_name or card.card_name }}</h2>
+                {% if card.french_name and card.french_name != card.card_name %}
+                    <p class="card-original-name">({{ card.card_name }})</p>
+                {% endif %}
+            </div>
+            
+            {% if card.image_url %}
+                <div class="card-image">
+                    <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="results-section">
+            <h3>Utilisateurs qui ont cette carte en trop:</h3>
+            {% if users_with_extra %}
+                <ul class="users-list">
+                    {% for user in users_with_extra %}
+                        <li>{{ user.name }} ({{ user.quantity }} disponible{% if user.quantity > 1 %}s{% endif %})</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Personne n'a cette carte en trop.</p>
+            {% endif %}
+            
+            <h3>Utilisateurs qui recherchent cette carte:</h3>
+            {% if users_wanting %}
+                <ul class="users-list">
+                    {% for user in users_wanting %}
+                        <li>{{ user.name }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Personne ne recherche cette carte.</p>
+            {% endif %}
+        </div>
+    {% else %}
+        <p>Carte non trouvée dans la base de données.</p>
+    {% endif %}
+    
+    <p><a href="{{ url_for('search') }}" class="button">Nouvelle recherche</a></p>
+{% endblock %} 
