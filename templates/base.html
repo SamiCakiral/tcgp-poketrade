@@ -400,6 +400,16 @@
                 font-size: 1rem;
             }
         }
+        .new-badge {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 5px;
+            margin-top: 5px;
+        }
+        
     </style>
 </head>
 <body>
@@ -411,6 +421,7 @@
                     <a href="{{ url_for('dashboard') }}">Tableau de bord</a>
                     <a href="{{ url_for('add_card') }}">Ajouter une carte</a>
                     <a href="{{ url_for('search') }}">Rechercher</a>
+                    <a href="{{ url_for('trade_assistant') }}" class="nav-link">Échanges <span class="new-badge">Nouveau</span></a>
                     <a href="{{ url_for('logout') }}">Déconnexion ({{ session.get('user_name') }})</a>
                 {% else %}
                     <a href="{{ url_for('login') }}">Connexion</a>

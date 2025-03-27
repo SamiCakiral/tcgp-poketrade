@@ -29,7 +29,7 @@ ENV/
 .env
 
 # Local DB
-pokemon_cards.db
+*.db
 
 # Google Cloud service account
 *.json
@@ -47,4 +47,5 @@ scraper.py
 translate_names.py
 app.yaml
 app_local.py
-
+enhance.py
+idéeReconnaissanceCartes.txt

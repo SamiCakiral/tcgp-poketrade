@@ -451,6 +451,24 @@
                 flex-direction: column;
             }
         }
+        
+        /* Style pour le nom de la carte */
+        .card-name {
+            padding: 8px;
+            text-align: center;
+            font-size: 0.85rem;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: rgba(0,0,0,0.7);
+            color: white;
+        }
+        
+        /* Ajuster la taille du conteneur d'image pour faire de la place pour le nom */
+        .card-image-container {
+            
+        }
     </style>
     
     <script>
@@ -532,6 +550,17 @@
                 const allSetsContainer = document.querySelector('.all-sets-container');
                 allSetsContainer.innerHTML = '<div class="loading">Chargement des séries...</div>';
                 
+                // Table de correspondance complète des noms de séries
+                const setNamesMapping = {
+                    'A1': 'Puissance Génétique',
+                    'A1a': 'Île Fabuleuse', 
+                    'A2': 'Choc Spatio-Temporelle',  // Correction du nom
+                    'A2a': 'Lumière Triomphale',     // Correction du nom
+                    'A2b': 'Réjouissances Rayonnantes',
+                    
+                    // Ajouter d'autres séries selon votre base de données
+                };
+                
                 fetch('/get_all_sets')
                     .then(response => response.json())
                     .then(sets => {
@@ -548,9 +577,14 @@
                                 setContainer.classList.add('collapsed');
                             }
                             
+                            // Priorité : 1) nom depuis l'API, 2) nom depuis le mapping, 3) "Série" par défaut
+                            const setName = (set.name && set.name !== 'Série') 
+                                            ? set.name 
+                                            : (setNamesMapping[set.set_id] || 'Série');
+                            
                             setContainer.innerHTML = `
                                 <div class="set-header">
-                                    <h2>${set.set_id} - ${set.name || 'Série'}</h2>
+                                    <h2>${set.set_id} - ${setName}</h2>
                                 </div>
                                 <div class="cards-grid" id="grid-${set.set_id}">
                                     <div class="loading-cards">Chargement des cartes...</div>
@@ -607,6 +641,11 @@
                                 imageContainer.appendChild(noImage);
                             }
                             
+                            // Ajouter le nom de la carte
+                            const cardName = document.createElement('div');
+                            cardName.className = 'card-name';
+                            cardName.textContent = card.french_name || card.card_name;
+                            
                             const cardNumber = document.createElement('div');
                             cardNumber.className = 'card-number';
                             cardNumber.textContent = card.card_number;
@@ -647,6 +686,7 @@
                             }
                             
                             cardBox.appendChild(imageContainer);
+                            cardBox.appendChild(cardName);
                             cardBox.appendChild(cardNumber);
                             
                             // Gestion de la sélection

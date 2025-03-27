@@ -2,11 +2,22 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import sqlite3
 from database import init_db, get_db_connection, upload_db_to_cloud
 import os
+from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = "y'en a pas"
 # Initialisation de la base de données
 init_db()
+
+# Décorateur pour vérifier si l'utilisateur est connecté
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Veuillez vous connecter pour accéder à cette page.')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/')
 def index():
@@ -75,10 +86,8 @@ def logout():
     return redirect(url_for('index'))
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
     conn, db_path = get_db_connection()
     
     # Récupérer toutes les cartes d'une série
@@ -86,7 +95,7 @@ def dashboard():
     
     # Récupérer toutes les cartes de la série active pour l'affichage Collection
     all_cards = conn.execute('''
-        SELECT id, set_id, card_number, card_name, french_name, image_url
+        SELECT id, set_id, card_number, card_name, french_name, image_url, rarity
         FROM cards 
         WHERE set_id = ?
         ORDER BY card_number
@@ -121,12 +130,13 @@ def dashboard():
             'A1': 'Puissance Génétique',
             'A1a': 'Île Fabuleuse',
             'A2': 'Choc Spatio-Temporelle',
-            'A2a': 'Lumière Triomphale'
+            'A2a': 'Lumière Triomphale',
+            'A2b': 'Réjouissances Rayonnantes'
         }.get(set_id, set_id)
         
         # Récupérer toutes les cartes de cette série
         set_cards = conn.execute('''
-            SELECT id, set_id, card_number, card_name, french_name, image_url
+            SELECT id, set_id, card_number, card_name, french_name, image_url, rarity
             FROM cards 
             WHERE set_id = ?
             ORDER BY card_number
@@ -186,10 +196,8 @@ def dashboard():
                           has_wanted_cards=has_wanted_cards)
 
 @app.route('/add_card', methods=['GET', 'POST'])
+@login_required
 def add_card():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
     if request.method == 'POST':
         set_id = request.form['set_id']
         card_number = request.form['card_number']
@@ -306,16 +314,15 @@ def card_info():
             'card_number': card['card_number'],
             'card_name': card['card_name'],
             'french_name': card['french_name'],
-            'image_url': card['image_url']
+            'image_url': card['image_url'],
+            'rarity': card['rarity']
         })
     else:
         return jsonify({'exists': False})
 
 @app.route('/delete_account', methods=['GET', 'POST'])
+@login_required
 def delete_account():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
     if request.method == 'POST':
         user_id = session['user_id']
         conn, db_path = get_db_connection()
@@ -364,7 +371,8 @@ def get_set_cards():
             'card_number': card['card_number'],
             'card_name': card['card_name'],
             'french_name': card['french_name'],
-            'image_url': card['image_url']
+            'image_url': card['image_url'],
+            'rarity': card['rarity']
         })
     
     return jsonify(result)
@@ -441,10 +449,8 @@ def add_multiple_cards():
         conn.close()
 
 @app.route('/increment_card', methods=['POST'])
+@login_required
 def increment_card():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Utilisateur non connecté'})
-    
     data = request.json
     set_id = data.get('set_id')
     card_number = data.get('card_number')
@@ -471,10 +477,8 @@ def increment_card():
         conn.close()
 
 @app.route('/remove_card', methods=['POST'])
+@login_required
 def remove_card():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Utilisateur non connecté'})
-    
     data = request.json
     set_id = data.get('set_id')
     card_number = data.get('card_number')
@@ -507,10 +511,8 @@ def remove_card():
         conn.close()
 
 @app.route('/add_to_collection', methods=['POST'])
+@login_required
 def add_to_collection():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Utilisateur non connecté'})
-    
     data = request.json
     set_id = data.get('set_id')
     card_number = data.get('card_number')
@@ -551,10 +553,8 @@ def add_to_collection():
         conn.close()
 
 @app.route('/add_to_wanted', methods=['POST'])
+@login_required
 def add_to_wanted():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Utilisateur non connecté'})
-    
     data = request.json
     set_id = data.get('set_id')
     card_number = data.get('card_number')
@@ -581,11 +581,9 @@ def add_to_wanted():
         conn.close()
 
 @app.route('/get_all_sets')
+@login_required
 def get_all_sets():
     """Récupère toutes les séries disponibles"""
-    if 'user_id' not in session:
-        return jsonify([])
-    
     conn, db_path = get_db_connection()
     sets = conn.execute('SELECT DISTINCT set_id FROM cards ORDER BY set_id').fetchall()
     conn.close()
@@ -609,19 +607,15 @@ def get_all_sets():
     return jsonify(result)
 
 @app.route('/hide_trade_notification', methods=['POST'])
+@login_required
 def hide_trade_notification():
-    if 'user_id' not in session:
-        return jsonify({'success': False})
-    
     session.pop('show_trade_notification', None)
     
     return jsonify({'success': True})
 
 @app.route('/convert_to_collection', methods=['POST'])
+@login_required
 def convert_to_collection():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Utilisateur non connecté'})
-    
     data = request.json
     set_id = data.get('set_id')
     card_number = data.get('card_number')
@@ -668,10 +662,8 @@ def convert_to_collection():
         conn.close()
 
 @app.route('/get_card_owners')
+@login_required
 def get_card_owners():
-    if 'user_id' not in session:
-        return jsonify({'owners': [], 'debug': 'Non connecté'})
-    
     set_id = request.args.get('set_id')
     card_number = request.args.get('card_number')
     
@@ -705,6 +697,225 @@ def get_card_owners():
     except Exception as e:
         print(f"Erreur: {str(e)}")
         return jsonify({'owners': [], 'error': str(e)})
+    finally:
+        conn.close()
+
+@app.route('/trade_assistant')
+@login_required
+def trade_assistant():
+    return render_template('trade_assistant.html')
+
+@app.route('/api/potential_trades')
+@login_required
+def get_potential_trades():
+    # Récupérer les paramètres de filtre et de tri
+    filter_type = request.args.get('filter', 'all')
+    sort_type = request.args.get('sort', 'relevance')
+    
+    # Récupérer l'utilisateur courant
+    user_id = session.get('user_id')
+    
+    # Connexion à la base de données
+    conn = sqlite3.connect('pokemon_cards.db')
+    conn.row_factory = sqlite3.Row  # Pour accéder aux colonnes par nom
+    cursor = conn.cursor()
+    
+    # 1. Récupérer les cartes recherchées par l'utilisateur
+    cursor.execute("""
+        SELECT c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity
+        FROM cards c
+        JOIN wanted_cards w ON c.set_id = w.set_id AND c.card_number = w.card_number
+        WHERE w.user_id = ?
+    """, (user_id,))
+    wanted_cards = [dict(row) for row in cursor.fetchall()]
+    
+    # 2. Récupérer les cartes en double des autres utilisateurs
+    cursor.execute("""
+        SELECT e.user_id as owner_id, c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity, u.name as owner_name
+        FROM extra_cards e
+        JOIN cards c ON e.set_id = c.set_id AND e.card_number = c.card_number
+        JOIN users u ON e.user_id = u.id
+        WHERE e.user_id != ? AND e.quantity > 1
+    """, (user_id,))
+    other_users_extras = [dict(row) for row in cursor.fetchall()]
+    
+    # 3. Récupérer les cartes en double de l'utilisateur courant
+    cursor.execute("""
+        SELECT c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity
+        FROM extra_cards e
+        JOIN cards c ON e.set_id = c.set_id AND e.card_number = c.card_number
+        WHERE e.user_id = ? AND e.quantity > 1
+    """, (user_id,))
+    user_extras = [dict(row) for row in cursor.fetchall()]
+    
+    # 4. Récupérer les cartes recherchées par les autres utilisateurs
+    cursor.execute("""
+        SELECT w.user_id as owner_id, c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity, u.name as owner_name
+        FROM wanted_cards w
+        JOIN cards c ON w.set_id = c.set_id AND w.card_number = c.card_number
+        JOIN users u ON w.user_id = u.id
+        WHERE w.user_id != ?
+    """, (user_id,))
+    other_users_wanted = [dict(row) for row in cursor.fetchall()]
+    
+    # Fermer la connexion à la base de données
+    conn.close()
+    
+    # Trouver les échanges potentiels
+    potential_trades = []
+    
+    # Pour chaque carte recherchée par l'utilisateur
+    for wanted_card in wanted_cards:
+        # Trouver les utilisateurs qui ont cette carte en double
+        for extra_card in other_users_extras:
+            if extra_card['id'] == wanted_card['id']:
+                # Pour chaque carte en double de l'utilisateur
+                for user_extra in user_extras:
+                    # Vérifier si l'autre utilisateur recherche cette carte
+                    for other_wanted in other_users_wanted:
+                        if other_wanted['id'] == user_extra['id'] and other_wanted['owner_id'] == extra_card['owner_id']:
+                            # Calculer la qualité du match
+                            match_quality = calculate_match_quality(wanted_card, user_extra, extra_card, other_wanted)
+                            
+                            # Créer l'échange potentiel
+                            trade = {
+                                'your_card': user_extra,
+                                'their_card': extra_card,
+                                'other_user': {
+                                    'id': extra_card['owner_id'],
+                                    'username': extra_card['owner_name']
+                                },
+                                'match_quality': match_quality
+                            }
+                            
+                            potential_trades.append(trade)
+    
+    # Appliquer les filtres
+    filtered_trades = filter_trades(potential_trades, filter_type)
+    
+    # Appliquer le tri
+    sorted_trades = sort_trades(filtered_trades, sort_type)
+    
+    # Renvoyer les résultats
+    return jsonify({
+        'success': True,
+        'trades': sorted_trades
+    })
+
+def calculate_match_quality(wanted_card, user_extra, extra_card, other_wanted):
+    # Vérifier si les cartes sont de la même série
+    same_set = wanted_card['set_id'] == user_extra['set_id']
+    
+    # Vérifier si les cartes sont de même rareté
+    same_rarity = wanted_card['rarity'] == user_extra['rarity']
+    
+    # Calculer la qualité du match
+    if same_set and same_rarity:
+        return 'Excellent'
+    elif same_rarity:
+        return 'Good'
+    else:
+        return 'Fair'
+
+def filter_trades(trades, filter_type):
+    if filter_type == 'all':
+        return trades
+    
+    filtered = []
+    for trade in trades:
+        if filter_type == 'same-set' and trade['your_card']['set_id'] == trade['their_card']['set_id']:
+            filtered.append(trade)
+        elif filter_type == 'same-rarity' and trade['your_card']['rarity'] == trade['their_card']['rarity']:
+            filtered.append(trade)
+        elif filter_type == 'best-match' and trade['match_quality'] == 'Excellent':
+            filtered.append(trade)
+    
+    return filtered
+
+def sort_trades(trades, sort_type):
+    # Fonction pour convertir une rareté en valeur numérique pour le tri
+    def rarity_value(rarity):
+        if not rarity:
+            return 0
+        if rarity == 'Common':
+            return 1
+        if rarity.startswith('Diamond'):
+            return 2 + int(rarity.split(' ')[1])
+        if rarity.startswith('Star'):
+            return 6 + int(rarity.split(' ')[1])
+        if rarity == 'Crown Rare':
+            return 10
+        return 0
+    
+    if sort_type == 'rarity-desc':
+        return sorted(trades, key=lambda t: rarity_value(t['their_card']['rarity']), reverse=True)
+    elif sort_type == 'rarity-asc':
+        return sorted(trades, key=lambda t: rarity_value(t['their_card']['rarity']))
+    elif sort_type == 'set':
+        return sorted(trades, key=lambda t: t['their_card']['set_id'])
+    else:  # sort_type == 'relevance' (par défaut)
+        # Trier par qualité de match (Excellent > Good > Fair)
+        quality_order = {'Excellent': 3, 'Good': 2, 'Fair': 1}
+        return sorted(trades, key=lambda t: quality_order.get(t['match_quality'], 0), reverse=True)
+
+@app.route('/api/propose_trade', methods=['POST'])
+@login_required
+def propose_trade():
+    data = request.json
+    
+    # Récupérer les données nécessaires
+    your_card_id = data.get('your_card_id')
+    their_card_id = data.get('their_card_id')
+    other_user_id = data.get('user_id')
+    user_id = session.get('user_id')
+    
+    # Vérifier que toutes les données nécessaires sont présentes
+    if not your_card_id or not their_card_id or not other_user_id:
+        return jsonify({'success': False, 'message': 'Données manquantes'})
+    
+    # Connexion à la base de données
+    conn = sqlite3.connect('pokemon_cards.db')
+    cursor = conn.cursor()
+    
+    try:
+        # Créer une table pour les propositions d'échange si elle n'existe pas
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trade_proposals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id INTEGER,
+                receiver_id INTEGER,
+                sender_card_id INTEGER,
+                receiver_card_id INTEGER,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sender_id) REFERENCES users (id),
+                FOREIGN KEY (receiver_id) REFERENCES users (id),
+                FOREIGN KEY (sender_card_id) REFERENCES cards (id),
+                FOREIGN KEY (receiver_card_id) REFERENCES cards (id)
+            )
+        ''')
+        
+        # Insérer la proposition d'échange
+        cursor.execute('''
+            INSERT INTO trade_proposals 
+            (sender_id, receiver_id, sender_card_id, receiver_card_id) 
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, other_user_id, your_card_id, their_card_id))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Proposition d\'échange envoyée avec succès!'
+        })
+    
+    except Exception as e:
+        conn.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Erreur lors de la création de la proposition d\'échange: {str(e)}'
+        })
+    
     finally:
         conn.close()
 

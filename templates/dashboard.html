@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+
     <div class="dashboard-header">
         <h1>Collection Pokémon</h1>
         <div class="view-toggle">
@@ -16,6 +18,7 @@
             <div class="notification-text">
                 <h3>Échanges possibles!</h3>
                 <p>Il y a {{ session.get('trade_matches_count', 0) }} carte(s) recherchée(s) disponible(s) chez d'autres collectionneurs.</p>
+                <p>Ramène ta race dans la section <a href="{{ url_for('trade_assistant') }}" class="new-badge" style=" background-color: #eae73f; color: rgb(122, 122, 122);">Échanges</a> pour voir les échanges possibles.</p>
             </div>
             <button class="close-notification" id="hide-notification">Masquer</button>
         </div>
@@ -50,6 +53,8 @@
                              data-card-id="{{ card.id }}" 
                              data-set-id="{{ card.set_id }}" 
                              data-card-number="{{ card.card_number }}"
+                             data-rarity="{{ card.rarity }}"
+                             data-card-name="{{ card.french_name or card.card_name }}"
                              {% if is_available %}data-owners="{{ available_dict[card_key] }}"{% endif %}>
                             <div class="card-image-container">
                                 {% if is_owned and card.image_url %}
@@ -58,7 +63,8 @@
                                     <div class="placeholder-number">{{ card.card_number }}</div>
                                 {% endif %}
                             </div>
-                            <div class="card-number">N°{{ card.card_number }}</div>
+                            <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
+                            <div class="card-number-badge">{{ card.card_number }}</div>
                             
                             {% if is_owned and extra_dict[card_key] > 1 %}
                                 <div class="card-quantity">×{{ extra_dict[card_key] }}</div>
@@ -78,6 +84,65 @@
                 </div>
             </div>
         {% endfor %}
+    </div>
+
+    <div class="sort-floating-button">
+        <button class="sort-btn" id="open-sort-menu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="9" x2="20" y2="9"></line>
+                <line x1="4" y1="15" x2="20" y2="15"></line>
+                <line x1="10" y1="3" x2="8" y2="21"></line>
+                <line x1="18" y1="4" x2="14" y2="20"></line>
+            </svg>
+        </button>
+    </div>
+
+    <div class="sort-menu" id="sort-menu">
+        <div class="sort-header">
+            <h3>Trier les cartes</h3>
+            <button class="close-sort-menu">&times;</button>
+        </div>
+        <div class="sort-options">
+            <div class="sort-group">
+                <div class="sort-group-title">Par collection</div>
+                <div class="sort-buttons">
+                    <button class="sort-option" data-sort="collection" data-order="asc">A → Z</button>
+                    <button class="sort-option" data-sort="collection" data-order="desc">Z → A</button>
+                </div>
+            </div>
+            
+            <div class="sort-group">
+                <div class="sort-group-title">Par rareté</div>
+                <div class="sort-buttons">
+                    <button class="sort-option" data-sort="rarity" data-order="asc">Commune → Rare</button>
+                    <button class="sort-option" data-sort="rarity" data-order="desc">Rare → Commune</button>
+                </div>
+            </div>
+            
+            <div class="sort-group">
+                <div class="sort-group-title">Par nom de carte</div>
+                <div class="sort-buttons">
+                    <button class="sort-option" data-sort="name" data-order="asc">A → Z</button>
+                    <button class="sort-option" data-sort="name" data-order="desc">Z → A</button>
+                </div>
+            </div>
+            
+            <div class="sort-group">
+                <div class="sort-group-title">Par numéro</div>
+                <div class="sort-buttons">
+                    <button class="sort-option" data-sort="number" data-order="asc">Croissant</button>
+                    <button class="sort-option" data-sort="number" data-order="desc">Décroissant</button>
+                </div>
+            </div>
+            
+            <div class="sort-group">
+                <div class="sort-group-title">Par cartes manquantes</div>
+                <div class="sort-buttons">
+                    <button class="sort-option" data-sort="missing" data-group="false">Sans regroupement</button>
+                    <button class="sort-option" data-sort="missing" data-group="true">Par collection</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="floating-action-button">
@@ -141,11 +206,14 @@
                                     data-card-id="{{ card.id }}"
                                     data-set-id="{{ card.set_id }}"
                                     data-card-number="{{ card.card_number }}"
+                                    data-rarity="{{ card.rarity }}"
+                                    data-card-name="{{ card.french_name or card.card_name }}"
                                     {% if is_available %}data-owners="{{ available_dict[card_key] }}"{% endif %}>
                                     <div class="card-image-container" >
                                         <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
                                     </div>
-                                    <div class="card-number">N°{{ card.card_number }}</div>
+                                    <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
+                                    <div class="card-number-badge">{{ card.card_number }}</div>
                                     
                                     {% if is_wanted %}
                                         <div class="card-wanted-badge">
@@ -288,8 +356,6 @@
             cursor: pointer;
             transition: var(--transition);
             aspect-ratio: 2.5/3.5;
-            display: flex;
-            flex-direction: column;
         }
         
         .card-box.owned {
@@ -311,16 +377,19 @@
         }
         
         .card-box:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 25px -5px rgba(0,0,0,0.1);
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 15px 25px -5px rgba(0,0,0,0.15);
         }
         
         .card-image-container {
-            flex: 1;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
         }
         
         .card-image-container img {
@@ -330,32 +399,85 @@
         }
         
         .placeholder-number {
-            font-size: 2rem;
+            font-size: 3rem;
             font-weight: 700;
             color: #cbd5e0;
         }
         
-        .card-number {
-            background: rgba(0,0,0,0.7);
+        .card-info-overlay {
+            display: none;
+        }
+        
+        .card-number-badge {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.8);
             color: white;
-            padding: 5px 8px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            z-index: 5;
+        }
+        
+        .card-name-tag {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.7) 60%, transparent);
+            color: white;
+            width: 100%;
+            padding: 8px 10px;
             font-size: 0.8rem;
-            text-align: center;
+            font-weight: 600;
+            z-index: 5;
+            text-align: left;
         }
         
         .card-quantity {
-            position: absolute;
             top: 8px;
             right: 8px;
-            background: #1a202c;
+            z-index: 6;
+        }
+        
+        .card-box.owned .card-name-tag {
+            background: linear-gradient(to bottom, rgba(38, 120, 76, 0.9), rgba(38, 120, 76, 0.7) 60%, transparent);
+        }
+        
+        .card-box.wanted .card-name-tag {
+            background: linear-gradient(to bottom, rgba(49, 100, 189, 0.9), rgba(49, 100, 189, 0.7) 60%, transparent);
+        }
+        
+        .card-box.missing .card-name-tag {
+            background: linear-gradient(to bottom, rgba(80, 90, 110, 0.9), rgba(80, 90, 110, 0.7) 60%, transparent);
+        }
+        
+        .available-badge {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: var(--accent-color);
             color: white;
             padding: 3px 8px;
             border-radius: 12px;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             font-weight: 600;
+            z-index: 5;
         }
         
-        
+        .card-wanted-badge {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            color: white;
+            z-index: 5;
+        }
         
         .empty-collection {
             grid-column: 1 / -1;
@@ -595,8 +717,7 @@
         
         .available-badge {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            left: 10px;
             background: var(--accent-color);
             color: white;
             padding: 3px 8px;
@@ -725,6 +846,164 @@
         .owners-list li:last-child {
             border-bottom: none;
         }
+
+        /* Bouton de tri flottant */
+        .sort-floating-button {
+            position: fixed;
+            bottom: 30px;
+            right: 100px; /* Décalé par rapport au FAB existant */
+            z-index: 100;
+        }
+        
+        .sort-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 50px;
+            height: 50px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+        
+        .sort-btn:hover {
+            transform: scale(1.1);
+            background: #4958b5;
+        }
+        
+        /* Menu de tri */
+        .sort-menu {
+            display: none;
+            position: fixed;
+            bottom: 90px;
+            right: 30px;
+            width: 300px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.15);
+            z-index: 110;
+            overflow: hidden;
+        }
+        
+        .sort-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid #edf2f7;
+            background: #f8fafc;
+        }
+        
+        .sort-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: var(--dark-color);
+        }
+        
+        .close-sort-menu {
+            background: none;
+            border: none;
+            color: #64748b;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        
+        .sort-options {
+            padding: 15px;
+        }
+        
+        .sort-group {
+            margin-bottom: 20px;
+        }
+        
+        .sort-group:last-child {
+            margin-bottom: 0;
+        }
+        
+        .sort-group-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--dark-color);
+        }
+        
+        .sort-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .sort-option {
+            padding: 6px 12px;
+            background: #f1f5f9;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: var(--dark-color);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .sort-option:hover {
+            background: #e2e8f0;
+        }
+        
+        .sort-option.active {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        /* Responsivité */
+        @media (max-width: 768px) {
+            .sort-floating-button {
+                bottom: 100px;
+                right: 30px;
+            }
+            
+            .sort-menu {
+                width: 280px;
+                max-height: 80vh;
+                overflow-y: auto;
+            }
+        }
+        
+        /* Animation pour l'ouverture du menu */
+        .sort-menu.open {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Style spécifique pour les cartes possédées */
+        .card-box.owned .card-info-overlay {
+            background: rgba(38, 120, 76, 0.85);
+        }
+
+        /* Style spécifique pour les cartes recherchées */
+        .card-box.wanted .card-info-overlay {
+            background: rgba(49, 100, 189, 0.85);
+        }
+
+        /* Style pour les cartes manquantes */
+        .card-box.missing .card-info-overlay {
+            background: rgba(80, 90, 110, 0.85);
+        }
     </style>
 
     <script>
@@ -733,6 +1012,17 @@
             const viewButtons = document.querySelectorAll('.view-toggle button');
             const collectionView = document.querySelectorAll('.collection-view');
             const wantedView = document.querySelectorAll('.wanted-view');
+            
+            // Restaurer la vue précédemment sélectionnée
+            const savedView = localStorage.getItem('pokeTrade_activeView') || 'collection';
+            
+            // Appliquer la vue sauvegardée
+            if (savedView === 'wanted') {
+                viewButtons.forEach(btn => btn.classList.remove('active'));
+                document.querySelector('[data-view="wanted"]').classList.add('active');
+                collectionView.forEach(el => el.style.display = 'none');
+                wantedView.forEach(el => el.style.display = '');
+            }
             
             viewButtons.forEach(button => {
                 button.addEventListener('click', function() {
@@ -749,6 +1039,9 @@
                         collectionView.forEach(el => el.style.display = 'none');
                         wantedView.forEach(el => el.style.display = '');
                     }
+                    
+                    // Sauvegarder la vue active
+                    localStorage.setItem('pokeTrade_activeView', view);
                 });
             });
             
@@ -898,100 +1191,391 @@
                         } else {
                             const newBadge = document.createElement('div');
                             newBadge.className = 'card-quantity';
-                            newBadge.textContent = `×2`;
+                            newBadge.textContent = `×${newQuantity}`;
                             cardBox.appendChild(newBadge);
                         }
                     }
                 });
             });
-            
-            // Supprimer une carte
-            document.getElementById('remove-card').addEventListener('click', function() {
-                if (!confirm('Êtes-vous sûr de vouloir supprimer cette carte?')) {
-                    return;
-                }
+
+            // Gestion du tri des cartes
+            function setupSortingSystem() {
+                const sortMenuBtn = document.getElementById('open-sort-menu');
+                const sortMenu = document.getElementById('sort-menu');
+                const closeSortMenuBtn = document.querySelector('.close-sort-menu');
+                const sortOptions = document.querySelectorAll('.sort-option');
                 
-                const setId = document.getElementById('modal-card-set').textContent;
-                const cardNumber = document.getElementById('modal-card-number').textContent;
-                const isWanted = document.querySelector('.wanted-view').style.display !== 'none';
+                // Ouvrir/fermer le menu de tri
+                sortMenuBtn.addEventListener('click', function() {
+                    sortMenu.classList.add('open');
+                });
                 
-                fetch('/remove_card', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        set_id: setId,
-                        card_number: cardNumber,
-                        is_wanted: isWanted
-                    }),
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        modal.style.display = 'none';
-                        const cardBox = document.querySelector(`.card-box[data-set-id="${setId}"][data-card-number="${cardNumber}"]`);
-                        cardBox.remove();
+                closeSortMenuBtn.addEventListener('click', function() {
+                    sortMenu.classList.remove('open');
+                });
+                
+                // Fermer le menu si on clique en dehors
+                window.addEventListener('click', function(event) {
+                    if (!sortMenu.contains(event.target) && event.target !== sortMenuBtn) {
+                        sortMenu.classList.remove('open');
                     }
                 });
-            });
-
-            // Code pour la suppression de compte
-            document.getElementById('delete-account-btn').addEventListener('click', function() {
-                document.getElementById('delete-account-modal').style.display = 'block';
-            });
-            
-            document.getElementById('cancel-delete').addEventListener('click', function() {
-                document.getElementById('delete-account-modal').style.display = 'none';
-            });
-            
-            document.getElementById('confirm-delete').addEventListener('click', function() {
-                fetch('/delete_account', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        window.location.href = '/';
-                    } else {
-                        alert('Erreur: ' + data.message);
-                    }
-                });
-            });
-
-            // Ajouter ce code pour gérer la notification
-            const hideNotificationBtn = document.getElementById('hide-notification');
-            if (hideNotificationBtn) {
-                hideNotificationBtn.addEventListener('click', function() {
-                    // Masquer visuellement la notification
-                    const notification = document.getElementById('trade-notification');
-                    notification.style.display = 'none';
-                    
-                    // Envoyer une requête pour ne plus afficher la notification
-                    fetch('/hide_trade_notification', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (!data.success) {
-                            console.error('Erreur lors de la désactivation de la notification');
-                        }
+                
+                // Le reste du code de tri...
+                sortOptions.forEach(option => {
+                    option.addEventListener('click', function() {
+                        // Mettre à jour la classe active
+                        sortOptions.forEach(btn => btn.classList.remove('active'));
+                        this.classList.add('active');
+                        
+                        // Récupérer les options de tri
+                        const sortType = this.getAttribute('data-sort');
+                        const sortOrder = this.getAttribute('data-order');
+                        const sortGroup = this.getAttribute('data-group');
+                        
+                        // Sauvegarder les préférences
+                        localStorage.setItem('pokeTrade_sortType', sortType);
+                        localStorage.setItem('pokeTrade_sortOrder', sortOrder);
+                        localStorage.setItem('pokeTrade_sortGroup', sortGroup);
+                        
+                        // Fermer le menu
+                        sortMenu.classList.remove('open');
+                        
+                        // Appliquer le tri (vous pouvez ajouter cette fonction plus tard)
+                        applySort(sortType, sortOrder, sortGroup === 'true');
                     });
                 });
             }
 
-            // Ajouter ensuite le gestionnaire pour le nouveau bouton
-            document.getElementById('convert-to-collection').addEventListener('click', function() {
+            // Fonction temporaire pour le tri
+            function applySort(sortType, sortOrder, groupByCollection) {
+                console.log(`Tri appliqué: ${sortType}, ordre: ${sortOrder}, grouper: ${groupByCollection}`);
+                
+                // Déterminer la vue active
+                const activeView = localStorage.getItem('pokeTrade_activeView') || 'collection';
+                const viewSelector = activeView === 'collection' ? '.collection-view' : '.wanted-view';
+                
+                // Si on veut trier sans regroupement par collection
+                if (sortType !== 'collection' && !groupByCollection) {
+                    flattenAndSortCards(sortType, sortOrder, viewSelector);
+                } else {
+                    // On trie les sets et les cartes à l'intérieur
+                    sortSetsAndCards(sortType, sortOrder, viewSelector);
+                }
+            }
+
+            // Fonction pour aplatir et trier toutes les cartes (sans regroupement)
+            function flattenAndSortCards(sortType, sortOrder, viewSelector) {
+                // Cacher temporairement tous les conteneurs de séries
+                const setContainers = document.querySelectorAll(`${viewSelector} .set-container`);
+                setContainers.forEach(container => {
+                    container.style.display = 'none';
+                });
+                
+                // Créer un conteneur pour toutes les cartes aplaties
+                let flatContainer = document.querySelector(`${viewSelector} .flattened-cards-container`);
+                if (!flatContainer) {
+                    flatContainer = document.createElement('div');
+                    flatContainer.className = 'flattened-cards-container set-container';
+                    flatContainer.innerHTML = `
+                        <div class="set-header">
+                            <h2>Toutes les cartes</h2>
+                        </div>
+                        <div class="cards-grid" id="flattened-grid-${viewSelector.replace('.', '')}"></div>
+                    `;
+                    document.querySelector(viewSelector).appendChild(flatContainer);
+                } else {
+                    flatContainer.style.display = 'block';
+                }
+                
+                // Collecter toutes les cartes
+                const allCards = [];
+                document.querySelectorAll(`${viewSelector} .set-container:not(.flattened-cards-container) .card-box`).forEach(cardBox => {
+                    const clone = cardBox.cloneNode(true);
+                    
+                    // Récupérer les données importantes
+                    const setId = cardBox.getAttribute('data-set-id');
+                    const cardNumber = parseInt(cardBox.getAttribute('data-card-number'));
+                    const cardName = cardBox.getAttribute('data-card-name') || '';
+                    const isOwned = cardBox.classList.contains('owned');
+                    const isWanted = cardBox.classList.contains('wanted');
+                    const rarity = cardBox.getAttribute('data-rarity') || '';
+                    
+                    allCards.push({
+                        element: clone,
+                        setId: setId,
+                        cardNumber: cardNumber,
+                        name: cardName,
+                        isOwned: isOwned,
+                        isWanted: isWanted,
+                        rarity: rarity
+                    });
+                });
+                
+                // Appliquer le tri
+                let sortedCards;
+                switch (sortType) {
+                    case 'collection':
+                        sortedCards = allCards.sort((a, b) => {
+                            const result = sortOrder === 'asc' 
+                                ? a.setId.localeCompare(b.setId) 
+                                : b.setId.localeCompare(a.setId);
+                            return result !== 0 ? result : a.cardNumber - b.cardNumber;
+                        });
+                        break;
+                        
+                    case 'rarity':
+                        sortedCards = allCards.sort((a, b) => {
+                            const result = sortOrder === 'asc'
+                                ? rarityValue(a.rarity) - rarityValue(b.rarity)
+                                : rarityValue(b.rarity) - rarityValue(a.rarity);
+                            return result !== 0 ? result : (a.setId.localeCompare(b.setId) || a.cardNumber - b.cardNumber);
+                        });
+                        break;
+                        
+                    case 'missing':
+                        sortedCards = allCards.sort((a, b) => {
+                            const result = a.isOwned ? 1 : -1;
+                            return result !== 0 ? result : (a.setId.localeCompare(b.setId) || a.cardNumber - b.cardNumber);
+                        });
+                        break;
+                        
+                    case 'name':
+                        sortedCards = allCards.sort((a, b) => {
+                            return sortOrder === 'asc'
+                                ? a.name.localeCompare(b.name)
+                                : b.name.localeCompare(a.name);
+                        });
+                        break;
+                        
+                    case 'number':
+                        sortedCards = allCards.sort((a, b) => {
+                            return sortOrder === 'asc'
+                                ? a.cardNumber - b.cardNumber
+                                : b.cardNumber - a.cardNumber;
+                        });
+                        break;
+                }
+                
+                // Afficher les cartes triées
+                const grid = document.getElementById(`flattened-grid-${viewSelector.replace('.', '')}`);
+                grid.innerHTML = '';
+                
+                sortedCards.forEach(card => {
+                    grid.appendChild(card.element);
+                });
+            }
+
+            // Fonction pour trier les séries et les cartes à l'intérieur
+            function sortSetsAndCards(sortType, sortOrder, viewSelector) {
+                // Masquer le conteneur aplati s'il existe
+                const flatContainer = document.querySelector(`${viewSelector} .flattened-cards-container`);
+                if (flatContainer) {
+                    flatContainer.style.display = 'none';
+                }
+                
+                // Afficher tous les conteneurs de séries
+                const setContainers = document.querySelectorAll(`${viewSelector} .set-container:not(.flattened-cards-container)`);
+                setContainers.forEach(container => {
+                    container.style.display = 'block';
+                });
+                
+                // Collecter les infos des séries
+                const sets = [];
+                setContainers.forEach(container => {
+                    const setHeader = container.querySelector('.set-header h2');
+                    if (!setHeader) return;
+                    
+                    const setId = setHeader.textContent.split(' - ')[0].trim();
+                    const ownedCards = container.querySelectorAll('.card-box.owned').length;
+                    const totalCards = container.querySelectorAll('.card-box').length;
+                    
+                    sets.push({
+                        element: container,
+                        setId: setId,
+                        ownedCount: ownedCards,
+                        totalCount: totalCards,
+                        completionRate: totalCards > 0 ? ownedCards / totalCards : 0
+                    });
+                    
+                    // Trier les cartes à l'intérieur de chaque série
+                    sortCardsWithinSet(container, sortType, sortOrder);
+                });
+                
+                // Trier les séries
+                let sortedSets;
+                if (sortType === 'collection') {
+                    sortedSets = sets.sort((a, b) => {
+                        return sortOrder === 'asc'
+                            ? a.setId.localeCompare(b.setId)
+                            : b.setId.localeCompare(a.setId);
+                    });
+                } else if (sortType === 'missing') {
+                    sortedSets = sets.sort((a, b) => {
+                        return a.completionRate - b.completionRate;
+                    });
+                } else {
+                    // Pour les autres types de tri, on garde l'ordre des séries
+                    sortedSets = sets;
+                }
+                
+                // Réorganiser les séries dans le DOM
+                const container = document.querySelector(viewSelector);
+                sortedSets.forEach(set => {
+                    container.appendChild(set.element);
+                });
+            }
+
+            // Fonction pour trier les cartes à l'intérieur d'une série
+            function sortCardsWithinSet(setContainer, sortType, sortOrder) {
+                const cardsGrid = setContainer.querySelector('.cards-grid');
+                if (!cardsGrid) return;
+                
+                const cards = [];
+                
+                // Collecter les cartes
+                setContainer.querySelectorAll('.card-box').forEach(cardBox => {
+                    const cardNumber = parseInt(cardBox.getAttribute('data-card-number'));
+                    const cardName = cardBox.getAttribute('data-card-name') || '';
+                    const isOwned = cardBox.classList.contains('owned');
+                    const isWanted = cardBox.classList.contains('wanted');
+                    const rarity = cardBox.getAttribute('data-rarity') || '';
+                    
+                    cards.push({
+                        element: cardBox,
+                        cardNumber: cardNumber,
+                        name: cardName,
+                        isOwned: isOwned,
+                        isWanted: isWanted,
+                        rarity: rarity
+                    });
+                });
+                
+                // Trier les cartes
+                let sortedCards;
+                switch (sortType) {
+                    case 'collection':
+                    case 'missing':
+                        // Pour collection ou manquantes, on trie par numéro de carte
+                        sortedCards = cards.sort((a, b) => {
+                            if (sortType === 'missing' && a.isOwned !== b.isOwned) {
+                                return a.isOwned ? 1 : -1;
+                            }
+                            return a.cardNumber - b.cardNumber;
+                        });
+                        break;
+                        
+                    case 'rarity':
+                        sortedCards = cards.sort((a, b) => {
+                            const result = sortOrder === 'asc'
+                                ? rarityValue(a.rarity) - rarityValue(b.rarity)
+                                : rarityValue(b.rarity) - rarityValue(a.rarity);
+                            return result !== 0 ? result : a.cardNumber - b.cardNumber;
+                        });
+                        break;
+                        
+                    case 'name':
+                        sortedCards = cards.sort((a, b) => {
+                            return sortOrder === 'asc'
+                                ? a.name.localeCompare(b.name)
+                                : b.name.localeCompare(a.name);
+                        });
+                        break;
+                        
+                    case 'number':
+                        sortedCards = cards.sort((a, b) => {
+                            return sortOrder === 'asc'
+                                ? a.cardNumber - b.cardNumber
+                                : b.cardNumber - a.cardNumber;
+                        });
+                        break;
+                }
+                
+                // Réorganiser les cartes
+                cardsGrid.innerHTML = '';
+                sortedCards.forEach(card => {
+                    cardsGrid.appendChild(card.element);
+                });
+            }
+
+            // Fonction pour convertir une rareté en valeur numérique pour le tri
+            function rarityValue(rarity) {
+                if (!rarity) return 0;
+                if (rarity === 'Common') return 1;
+                if (rarity.startsWith('Diamond')) {
+                    return 2 + parseInt(rarity.split(' ')[1] || 0);
+                }
+                if (rarity.startsWith('Star')) {
+                    return 6 + parseInt(rarity.split(' ')[1] || 0);
+                }
+                if (rarity === 'Crown Rare') return 10;
+                return 0;
+            }
+
+            // Initialiser le système de tri
+            setupSortingSystem();
+
+            // 1. Fonction pour rendre les sets rétractables
+            function setupCollapsibleSets() {
+                // Pour chaque entête de set
+                document.querySelectorAll('.set-header').forEach(header => {
+                    header.addEventListener('click', function() {
+                        // Récupérer le conteneur parent
+                        const setContainer = this.closest('.set-container');
+                        // Basculer la classe collapsed
+                        setContainer.classList.toggle('collapsed');
+                        
+                        // Sauvegarder l'état dans le localStorage
+                        const setId = this.querySelector('h2').textContent.split(' - ')[0].trim();
+                        localStorage.setItem(`set_${setId}_collapsed`, setContainer.classList.contains('collapsed'));
+                    });
+                });
+                
+                // Restaurer l'état précédent depuis localStorage
+                document.querySelectorAll('.set-container').forEach(container => {
+                    const setId = container.querySelector('h2').textContent.split(' - ')[0].trim();
+                    const isCollapsed = localStorage.getItem(`set_${setId}_collapsed`) === 'true';
+                    
+                    if (isCollapsed) {
+                        container.classList.add('collapsed');
+                    }
+                });
+            }
+
+            // 2. Fonction pour mettre à jour les compteurs de cartes
+            function updateCardCounts() {
+                // Pour chaque conteneur de série
+                document.querySelectorAll('.collection-view .set-container').forEach(container => {
+                    // Compter toutes les cartes
+                    const totalCards = container.querySelectorAll('.cards-grid .card-box').length;
+                    
+                    // Compter les cartes avec la classe "owned"
+                    const ownedCards = container.querySelectorAll('.cards-grid .card-box.owned').length;
+                    
+                    // Mettre à jour le compteur
+                    const countElement = container.querySelector('.set-stats .card-count');
+                    if (countElement) {
+                        countElement.textContent = `${ownedCards} / ${totalCards}`;
+                        
+                        // Mettre en évidence les séries complètes ou avancées
+                        if (ownedCards === totalCards && totalCards > 0) {
+                            countElement.style.color = '#48bb78'; // vert
+                            countElement.style.fontWeight = 'bold';
+                        } else if (ownedCards > totalCards * 0.75) {
+                            countElement.style.color = '#3182ce'; // bleu
+                        }
+                    }
+                });
+            }
+
+            // 3. Ajouter les gestionnaires d'événements pour les boutons d'action
+
+            // Ajouter à la collection
+            document.getElementById('add-to-collection').addEventListener('click', function() {
                 const setId = document.getElementById('modal-card-set').textContent;
                 const cardNumber = document.getElementById('modal-card-number').textContent;
                 
-                fetch('/convert_to_collection', {
+                fetch('/add_to_collection', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1015,20 +1599,19 @@
                 });
             });
 
-            // Ajouter aussi un gestionnaire pour le bouton "Retirer des recherches"
-            document.getElementById('remove-from-wanted').addEventListener('click', function() {
+            // Ajouter aux recherches
+            document.getElementById('add-to-wanted').addEventListener('click', function() {
                 const setId = document.getElementById('modal-card-set').textContent;
                 const cardNumber = document.getElementById('modal-card-number').textContent;
                 
-                fetch('/remove_card', {
+                fetch('/add_to_wanted', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         set_id: setId,
-                        card_number: cardNumber,
-                        is_wanted: true
+                        card_number: cardNumber
                     }),
                 })
                 .then(response => response.json())
@@ -1044,82 +1627,40 @@
                     }
                 });
             });
-        });
 
-        function updateCardCounts() {
-            // Pour chaque conteneur de série
-            document.querySelectorAll('.collection-view .set-container').forEach(container => {
-                // Compter toutes les cartes
-                const totalCards = container.querySelectorAll('.cards-grid .card-box').length;
-                
-                // Compter les cartes avec la classe "owned"
-                const ownedCards = container.querySelectorAll('.cards-grid .card-box.owned').length;
-                
-                // Mettre à jour le compteur
-                const countElement = container.querySelector('.set-stats .card-count');
-                if (countElement) {
-                    countElement.textContent = `${ownedCards} / ${totalCards}`;
-                    
-                    // Mettre en évidence les séries complètes ou avancées
-                    if (ownedCards === totalCards && totalCards > 0) {
-                        countElement.style.color = '#48bb78'; // vert
-                        countElement.style.fontWeight = 'bold';
-                    } else if (ownedCards > totalCards * 0.75) {
-                        countElement.style.color = '#3182ce'; // bleu
+            // 4. Gestionnaires pour la suppression de compte
+            document.getElementById('delete-account-btn').addEventListener('click', function() {
+                document.getElementById('delete-account-modal').style.display = 'block';
+            });
+
+            document.getElementById('cancel-delete').addEventListener('click', function() {
+                document.getElementById('delete-account-modal').style.display = 'none';
+            });
+
+            document.getElementById('confirm-delete').addEventListener('click', function() {
+                fetch('/delete_account', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
                     }
-                }
-            });
-        }
-
-        // Exécuter la fonction après le chargement de la page
-        document.addEventListener('DOMContentLoaded', function() {
-            // Laisser un peu de temps pour que tout se charge
-            setTimeout(updateCardCounts, 300);
-            
-            // Mettre à jour lors du changement de vue
-            document.querySelectorAll('.view-toggle button').forEach(button => {
-                button.addEventListener('click', function() {
-                    setTimeout(updateCardCounts, 100);
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = '/';
+                    } else {
+                        alert('Erreur: ' + data.message);
+                    }
                 });
             });
-        });
 
-        // Fonction pour rendre les sets rétractables
-        function setupCollapsibleSets() {
-            // Pour chaque entête de set
-            document.querySelectorAll('.set-header').forEach(header => {
-                header.addEventListener('click', function() {
-                    // Récupérer le conteneur parent
-                    const setContainer = this.closest('.set-container');
-                    // Basculer la classe collapsed
-                    setContainer.classList.toggle('collapsed');
-                    
-                    // Sauvegarder l'état dans le localStorage
-                    const setId = this.querySelector('h2').textContent.split(' - ')[0].trim();
-                    localStorage.setItem(`set_${setId}_collapsed`, setContainer.classList.contains('collapsed'));
-                });
-            });
-            
-            // Restaurer l'état précédent depuis localStorage
-            document.querySelectorAll('.set-container').forEach(container => {
-                const setId = container.querySelector('h2').textContent.split(' - ')[0].trim();
-                const isCollapsed = localStorage.getItem(`set_${setId}_collapsed`) === 'true';
-                
-                if (isCollapsed) {
-                    container.classList.add('collapsed');
-                }
-            });
-        }
-
-        // Exécuter après le chargement de la page
-        document.addEventListener('DOMContentLoaded', function() {
+            // 5. Appel des fonctions d'initialisation
             // Configurer les sets rétractables
             setupCollapsibleSets();
-            
-            // Autres fonctions existantes...
+
+            // Mettre à jour les compteurs de cartes
             setTimeout(updateCardCounts, 300);
-            
-            // ... reste du code existant ...
         });
     </script>
-{% endblock %} 
+
+{% endblock %}
