@@ -1,0 +1,2078 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Assistant IA Pokédex</h1>
+
+<div id="pokedex-analyzer-app">
+
+    <!-- Barre de progression des étapes -->
+    <div class="stepper-container" style="display: flex; justify-content: space-around; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0;">
+        <div id="step-indicator-1" class="step-indicator active">
+            <div class="step-circle">1</div>
+            <div class="step-label">Téléchargement & Analyse</div>
+        </div>
+        <div class="step-connector"></div>
+        <div id="step-indicator-2" class="step-indicator">
+            <div class="step-circle">2</div>
+            <div class="step-label">Vérification & Sauvegarde</div>
+        </div>
+    </div>
+
+    <!-- == ÉTAPE 1: Upload / Analyse Individuelle == -->
+    <div id="step-1-content">
+        <h2>Étape 1 : Télécharger les Captures d'écran</h2>
+
+        <div class="instructions" style="background-color: #f0f4f8; padding: 15px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid var(--primary-color);">
+            <p><strong>Conseils pour des captures d'écran optimales :</strong></p>
+            <ul>
+                <li>Utilisez la vue "par set" dans votre jeu Pokémon.</li>
+                <li>Assurez-vous que les numéros des cartes sont bien visibles.</li>
+                <li>Prenez les photos dans un environnement bien éclairé, sans reflets.</li>
+                <li>Formats acceptés : JPG, PNG.</li>
+            </ul>
+        </div>
+
+        <!-- Zone d'Upload -->
+        <div id="drop-zone" style="border: 2px dashed #cbd5e0; border-radius: 8px; padding: 40px; text-align: center; margin-bottom: 25px; background-color: #f7fafc; transition: background-color 0.3s ease;">
+            <input type="file" id="file-input" multiple accept="image/jpeg, image/png" style="display: none;">
+            <p style="margin-bottom: 15px; color: #718096;">Glissez-déposez vos captures d'écran ici ou</p>
+            <label for="file-input" class="button secondary-button" style="cursor: pointer;">Parcourir les fichiers</label>
+        </div>
+
+        <!-- Prévisualisation et statut par fichier -->
+        <div id="file-preview-container" style="margin-bottom: 25px; display: none;">
+            <h3>Fichiers sélectionnés :</h3>
+            <ul id="file-list" style="list-style: none; padding: 0; max-height: 250px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px;"></ul>
+        </div>
+
+        <!-- Boutons d'action Étape 1 -->
+        <div class="step-1-actions" style="display: flex; gap: 15px; align-items: center;">
+            <!-- Bouton Lancer Analyse -->
+            <button id="process-button" class="button" disabled>Analyser les Fichiers</button>
+            <!-- NOUVEAU : Bouton pour passer à l'étape 2 -->
+            <button id="go-to-step2-button" class="button" style="display: none;">Voir les résultats & Vérifier</button>
+        </div>
+
+        <!-- Zone feedback global étape 1 -->
+         <div id="step1-feedback" style="margin-top: 15px;">
+            <div id="global-progress-container" style="display: none; margin-bottom: 10px;">
+                Analyse globale: <progress id="global-progress" value="0" max="100" style="width: 80%;"></progress> <span id="global-progress-text">0%</span>
+            </div>
+            <div id="global-errors-step1" style="color: var(--danger-color);"></div>
+        </div>
+    </div>
+
+    <!-- == ÉTAPE 2: Vérification (style Dashboard) == -->
+    <div id="step-2-content" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+             <h2>Étape 2 : Vérifier et Ajuster la Détection</h2>
+        </div>
+
+        <!-- === MODIFIÉ : Section Revue Structurée en 2 Panneaux === -->
+        <div id="review-section" style="display: none; gap: 25px; margin-bottom: 30px;">
+
+            <!-- NOUVEAU : Panneau Gauche (Sticky) -->
+            <div id="review-left-panel">
+            <!-- Conteneur pour l'image du screenshot -->
+                <div id="review-screenshot-container" style="min-width: 300px; width: 100%; border: 1px solid #cbd5e0; background-color: #edf2f7; display: flex; align-items: center; justify-content: center; min-height: 300px; margin-bottom: 15px; border-radius: 6px;">
+                    <img id="review-screenshot-image" src="" alt="Capture d'écran en revue" style="max-width: 100%; max-height: 400px; display: none; object-fit: contain; transition: opacity 0.3s ease-in-out;">
+                <p id="review-placeholder-text" style="color: #718096;">Chargement de la capture d'écran...</p>
+            </div>
+            <!-- Conteneur pour les contrôles et infos -->
+                <div id="review-controls" style="width: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: center;">
+                <div>
+                    <h4 style="margin-top: 0; margin-bottom: 10px; text-align: center;">Revue des Captures</h4>
+                    <p id="review-file-info" style="font-size: 0.9em; text-align: center; margin-bottom: 15px;">Capture 0 / 0</p>
+                    <div style="display: flex; gap: 10px; justify-content: center;">
+                        <button id="review-prev-button" class="button secondary-button" disabled>&lt; Précédent</button>
+                        <button id="review-next-button" class="button secondary-button" disabled>Suivant &gt;</button>
+                    </div>
+                </div>
+                <button id="close-review-button" class="button danger-button" style="margin-top: 20px;">Fermer la Revue</button>
+            </div>
+            </div> <!-- Fin review-left-panel -->
+
+            <!-- NOUVEAU : Panneau Droite (Scrollable) -->
+            <div id="review-right-panel">
+                <!-- Conteneur pour la GRILLE de revue (placé ici) -->
+                <div id="review-detected-cards-container" style="display: none; width: 100%; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; background-color: #f8fafc;">
+            <h4 style="margin-top: 0; margin-bottom: 15px;">Grille Détectée dans cette Capture :</h4>
+            <div id="review-detected-cards-grid" class="review-cards-grid" style="display: grid; gap: 10px;">
+                <!-- Les slots de la grille (cartes ou vides) seront injectés ici -->
+                 <p id="loading-review-grid" style="grid-column: 1 / -1; color: #718096;">Chargement de la grille détectée...</p>
+                 <p id="no-review-grid-found" style="display: none; grid-column: 1 / -1; color: #718096;">Aucune grille ou carte plausible détectée dans cette capture.</p>
+            </div>
+        </div>
+            </div> <!-- Fin review-right-panel -->
+        </div>
+        <!-- === FIN Section Revue Structurée === -->
+
+        <!-- Résumé (Modifié) -->
+        <div id="analysis-summary" class="results-section" style="margin-bottom: 30px;">
+            <h3>Résumé de l'Analyse</h3>
+            <p><strong>Séries Détectées :</strong> <span id="detected-series-list">Chargement...</span></p>
+            <p><span id="ai-present-count">0</span> cartes pré-marquées comme détectées par l'IA.</p>
+            <p><span id="already-owned-count">0</span> cartes déjà présentes dans votre collection (marquées en bleu).</p>
+            <p><span id="newly-detected-count">0</span> nouvelles cartes détectées (marquées en jaune).</p>
+             <!-- Zone pour afficher les erreurs/warnings de l'agrégation -->
+            <div id="aggregation-warnings" style="color: #dd6b20; margin-top: 10px; font-size: 0.9em;"></div>
+        </div>
+
+         <!-- Filtres (inchangé) -->
+        <div class="filter-controls" style="margin-bottom: 20px;">
+            <input type="text" id="filter-cards-step2" placeholder="Filtrer par nom ou numéro..." style="width: 100%; max-width: 400px;">
+        </div>
+
+
+        <!-- Grille de Vérification (Unique) -->
+        <div id="verification-grid-container" style="margin-top: 20px;">
+             <!-- Les titres des sets et les cartes seront injectés ici par JS -->
+             <div id="verification-grid" class="cards-grid" style="grid-template-columns: repeat(5, 1fr); gap: 15px;">
+                <p id="loading-verification-grid">Chargement des données utilisateur et des cartes...</p>
+                <p id="no-cards-found-step2" style="display: none;">Aucune carte trouvée pour les séries détectées.</p>
+            </div>
+        </div>
+
+        <!-- Légende (Modifiée) -->
+        <div class="legend" style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; display: flex; flex-wrap: wrap; gap: 15px;">
+            <span>Légende:</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><div class="legend-swatch missing"></div> Manquante</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><div class="legend-swatch already-owned"></div> Déjà Possédée</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><div class="legend-swatch newly-detected"></div> Nouvelle Détection IA</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><div class="legend-swatch manually-added"></div> Ajout Manuel</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><div class="legend-swatch marked-for-removal"></div> Marqué pour Suppression</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><div class="legend-swatch has-multiple"></div> Quantité > 1</span>
+        </div>
+
+        <!-- Message d'état Sauvegarde -->
+        <div id="save-status-container" style="margin-top: 20px; display: none; text-align: center;">
+             <p id="save-status" style="font-weight: 500;"></p>
+        </div>
+
+        <!-- Boutons d'Action Étape 2 -->
+        <div class="step-2-actions" style="margin-top: 30px; display: flex; justify-content: space-between; gap: 15px;">
+            <button id="back-button" class="button secondary-button">Retour (Réanalyser)</button>
+            <button id="save-button" class="button" disabled>Sauvegarder ma Sélection</button>
+        </div>
+    </div>
+
+</div>
+
+<!-- Template pour item fichier (inchangé) -->
+<template id="file-list-item-template">
+    <li class="file-list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #edf2f7; gap: 10px;">
+        <div class="file-status-indicator pending" title="En attente"></div>
+        <div style="flex-grow: 1; overflow: hidden; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+            <span class="file-name" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+            <span class="file-analysis-feedback" style="font-size: 0.8em; color: #718096; white-space: nowrap; text-align: right;"></span>
+            <span class="file-size" style="font-size: 0.85em; color: #718096; white-space: nowrap;"></span>
+        </div>
+        <button class="remove-file-button" style="background: none; border: none; color: var(--danger-color); cursor: pointer; font-size: 1.1em; padding: 0 5px; flex-shrink: 0;">&times;</button>
+    </li>
+</template>
+
+<!-- Template pour carte dans la grille de vérification (Simplifié) -->
+<template id="verification-card-template">
+     <div class="card-box" data-card-key="" data-set-id="" data-card-number="" data-card-name-sort="" data-card-number-sort="" data-current-quantity="0">
+        <!-- Overlay pour .newly-detected -->
+        <div class="newly-detected-overlay"></div>
+        <div class="card-image-container">
+            <img src="" alt="" class="card-img" style="display: none;">
+            <div class="placeholder-number" style="display: flex;"></div>
+            <!-- Pastille supprimée -->
+        </div>
+        <div class="card-name-tag"></div>
+        <div class="card-number-badge"></div>
+         <!-- Contrôle Quantité -->
+        <div class="quantity-control" style="display: none;" title="Ajuster la quantité possédée">
+            <button class="quantity-decrease" aria-label="Diminuer quantité">-</button>
+            <span class="quantity-display">x1</span>
+            <button class="quantity-increase" aria-label="Augmenter quantité">+</button>
+        </div>
+    </div>
+</template>
+
+<!-- Simplification du template des slots -->
+<template id="review-grid-slot-template">
+    <div class="review-grid-slot" data-card-key="" data-status="" data-original-status="">
+        <img src="" alt="" class="review-card-img" style="display: none;">
+        <div class="review-card-placeholder" style="display: flex;"></div>
+        <span class="review-card-number"></span>
+        <!-- Badge de modification manuelle -->
+        <span class="review-manual-badge" style="display: none;">Modifié</span>
+    </div>
+</template>
+
+<!-- Template pour séparateur de série -->
+<template id="series-separator-template">
+    <h3 class="series-separator" style="grid-column: 1 / -1; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid var(--primary-color); font-size: 1.4em;">
+        <span class="series-name"></span> (<span class="series-id"></span>)
+    </h3>
+</template>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --- Initialisation & Sélecteurs (Ajouter nouveaux éléments) ---
+console.log("Assistant IA Pokédex v4.3 (Debug Lookup Grille Revue) chargé.");
+
+const step1Content = document.getElementById('step-1-content');
+const step2Content = document.getElementById('step-2-content');
+const stepIndicator1 = document.getElementById('step-indicator-1');
+const stepIndicator2 = document.getElementById('step-indicator-2');
+
+// Étape 1
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const fileList = document.getElementById('file-list');
+const filePreviewContainer = document.getElementById('file-preview-container');
+const processButton = document.getElementById('process-button'); // Renommé
+const step1Feedback = document.getElementById('step1-feedback');
+const globalProgressContainer = document.getElementById('global-progress-container');
+const globalProgress = document.getElementById('global-progress');
+const globalProgressText = document.getElementById('global-progress-text');
+const globalErrorsStep1 = document.getElementById('global-errors-step1');
+const fileListItemTemplate = document.getElementById('file-list-item-template');
+
+// Étape 2
+const analysisSummary = document.getElementById('analysis-summary');
+const detectedSeriesList = document.getElementById('detected-series-list');
+const aiPresentCount = document.getElementById('ai-present-count');
+const alreadyOwnedCount = document.getElementById('already-owned-count');
+const newlyDetectedCount = document.getElementById('newly-detected-count');
+const aggregationWarnings = document.getElementById('aggregation-warnings'); // Renommé
+const filterCardsInput = document.getElementById('filter-cards-step2'); // Renommé
+const verificationGridContainer = document.getElementById('verification-grid-container');
+const verificationGrid = document.getElementById('verification-grid');
+const loadingVerificationGridMsg = document.getElementById('loading-verification-grid');
+const noCardsFoundStep2Msg = document.getElementById('no-cards-found-step2');
+const backButton = document.getElementById('back-button');
+const saveButton = document.getElementById('save-button');
+const saveStatusContainer = document.getElementById('save-status-container');
+const saveStatus = document.getElementById('save-status');
+const verificationCardTemplate = document.getElementById('verification-card-template');
+const seriesSeparatorTemplate = document.getElementById('series-separator-template');
+
+// --- Sélecteurs Revue (Modifiés/Ajoutés) ---
+const reviewSection = document.getElementById('review-section'); // Conteneur principal (maintenant flex)
+const reviewLeftPanel = document.getElementById('review-left-panel'); // Nouveau: Panneau sticky
+const reviewRightPanel = document.getElementById('review-right-panel'); // Nouveau: Panneau scrollable
+const reviewScreenshotContainer = document.getElementById('review-screenshot-container'); // Dans panneau gauche
+const reviewScreenshotImage = document.getElementById('review-screenshot-image'); // Dans conteneur image
+const reviewPlaceholderText = document.getElementById('review-placeholder-text'); // Dans conteneur image
+const reviewControls = document.getElementById('review-controls'); // Dans panneau gauche
+const reviewFileInfo = document.getElementById('review-file-info'); // Dans contrôles
+const reviewPrevButton = document.getElementById('review-prev-button'); // Dans contrôles
+const reviewNextButton = document.getElementById('review-next-button'); // Dans contrôles
+const closeReviewButton = document.getElementById('close-review-button'); // Dans contrôles
+const reviewDetectedCardsContainer = document.getElementById('review-detected-cards-container'); // Dans panneau droit
+const reviewDetectedCardsGrid = document.getElementById('review-detected-cards-grid'); // Dans conteneur grille
+const loadingReviewGridMsg = document.getElementById('loading-review-grid'); // Dans grille
+const noReviewGridFoundMsg = document.getElementById('no-review-grid-found'); // Dans grille
+const reviewGridSlotTemplate = document.getElementById('review-grid-slot-template'); // Template
+// const reviewCardItemTemplate = document.getElementById('review-card-item-template'); // Supprimé ou non utilisé ? A vérifier
+
+let selectedFiles = [];
+let analysisResultsCache = {};
+let processingInProgress = false;
+let allCardsData = {};
+let allSetsData = [];
+let userCardsStatus = { extra_dict: {}, wanted_dict: {} };
+let currentReviewIndex = -1;
+const goToStep2Button = document.getElementById('go-to-step2-button');
+let lastAggregationData = null;
+
+// --- Chargement Données Base (Ajout Log) ---
+async function fetchBaseCardData() {
+    try {
+        const setsResponse = await fetch("{{ url_for('get_all_sets') }}");
+        if (!setsResponse.ok) throw new Error('Erreur récupération séries');
+        allSetsData = await setsResponse.json();
+
+        allCardsData = {};
+        let loggedExampleCard = false; // Pour ne logger qu'une fois
+
+        for (const setInfo of allSetsData) {
+            const cardsResponse = await fetch(`{{ url_for('get_set_cards') }}?set_id=${setInfo.set_id}`);
+            if (!cardsResponse.ok) throw new Error(`Erreur récupération cartes pour ${setInfo.set_id}`);
+            const cards = await cardsResponse.json();
+
+            cards.forEach(card => {
+                // === AJOUT LOG Structure Carte ===
+                if (card && !loggedExampleCard) {
+                    console.log("Exemple de structure de données 'card' reçue depuis /get_set_cards:", JSON.stringify(card, null, 2)); // Affiche la structure détaillée
+                    loggedExampleCard = true; // Ne loguer qu'une seule carte exemple
+                }
+                // === FIN AJOUT LOG ===
+
+                const key = `${card.set_id}-${card.card_number}`;
+                allCardsData[key] = card;
+            });
+        }
+        console.log(`Données de ${Object.keys(allCardsData).length} cartes chargées.`);
+        console.log("Sets chargés:", allSetsData.map(s => s.set_id));
+
+    } catch (error) {
+        console.error("Erreur lors du chargement des données de base:", error);
+        globalErrorsStep1.innerHTML = `<li>Erreur critique chargement données: ${error.message}. L'assistant risque de mal fonctionner.</li>`
+        processButton.disabled = true;
+        processButton.textContent = 'Erreur chargement données';
+    }
+}
+document.addEventListener('DOMContentLoaded', fetchBaseCardData);
+
+
+// --- Étape 1 : UI & Analyse Individuelle ---
+
+function updateFileListUI() {
+    fileList.innerHTML = '';
+    globalErrorsStep1.innerHTML = ''; // Nettoyer erreurs globales
+    analysisResultsCache = {}; // Vider le cache des résultats précédents
+
+    if (selectedFiles.length > 0) {
+        filePreviewContainer.style.display = 'block';
+        selectedFiles.forEach((file, index) => {
+            const listItemClone = fileListItemTemplate.content.cloneNode(true);
+            const liElement = listItemClone.querySelector('.file-list-item');
+            liElement.dataset.index = index; // Important pour retrouver le fichier
+
+            listItemClone.querySelector('.file-name').textContent = file.name;
+            let size = file.size; let unit = 'octets';
+            if (size > 1024 * 1024) { size = (size / (1024 * 1024)).toFixed(2); unit = 'Mo'; }
+            else if (size > 1024) { size = (size / 1024).toFixed(1); unit = 'Ko'; }
+            listItemClone.querySelector('.file-size').textContent = `${size} ${unit}`;
+
+            // Masquer le feedback initialement
+            listItemClone.querySelector('.file-analysis-feedback').textContent = '';
+
+            const removeButton = listItemClone.querySelector('.remove-file-button');
+            removeButton.onclick = handleRemoveFile; // Attacher direct ici
+
+            fileList.appendChild(listItemClone);
+        });
+        processButton.disabled = processingInProgress; // Activer si pas en cours
+    } else {
+        filePreviewContainer.style.display = 'none';
+        processButton.disabled = true; // Désactiver si pas de fichiers
+    }
+    // Cacher la progression globale si pas en cours
+    globalProgressContainer.style.display = processingInProgress ? 'block' : 'none';
+}
+
+function handleFileSelection(files) {
+    if (processingInProgress) return; // Ignorer si déjà en traitement
+    const newFiles = Array.from(files).filter(file =>
+        file.type.startsWith('image/') &&
+        !selectedFiles.some(existingFile => existingFile.name === file.name)
+    );
+    selectedFiles = selectedFiles.concat(newFiles);
+    updateFileListUI();
+}
+
+function handleRemoveFile(event) {
+    if (!event || !event.target || processingInProgress) return;
+    const listItem = event.target.closest('.file-list-item');
+    if (!listItem || listItem.dataset.index === undefined) return;
+    const indexToRemove = parseInt(listItem.dataset.index, 10);
+    if (!isNaN(indexToRemove) && indexToRemove >= 0 && indexToRemove < selectedFiles.length) {
+        selectedFiles.splice(indexToRemove, 1);
+
+        // *** NOUVEAU : Invalider le passage à l'étape 2 si on change les fichiers ***
+        goToStep2Button.style.display = 'none';
+        lastAggregationData = null;
+        // Réactiver le bouton Analyse pour pouvoir relancer avec le nouveau set de fichiers
+        processButton.textContent = 'Analyser les Fichiers';
+        processButton.disabled = (selectedFiles.length === 0);
+
+        updateFileListUI(); // Met à jour les index et l'UI
+    }
+}
+
+// Gestionnaires Drag/Drop/Input (inchangés)
+fileInput.addEventListener('change', (event) => { handleFileSelection(event.target.files); event.target.value = null; });
+dropZone.addEventListener('dragover', (event) => { event.preventDefault(); if (!processingInProgress) dropZone.style.backgroundColor = '#e9eff5'; });
+dropZone.addEventListener('dragleave', () => { if (!processingInProgress) dropZone.style.backgroundColor = '#f7fafc'; });
+dropZone.addEventListener('drop', (event) => { event.preventDefault(); if (!processingInProgress) { dropZone.style.backgroundColor = '#f7fafc'; handleFileSelection(event.dataTransfer.files); } });
+
+// --- Clic sur "Analyser & Préparer" ---
+processButton.addEventListener('click', async () => {
+    if (selectedFiles.length === 0 || processingInProgress) return;
+
+    processingInProgress = true;
+    processButton.disabled = true;
+    processButton.textContent = 'Analyse en cours...';
+    goToStep2Button.style.display = 'none'; // Cacher le bouton étape 2 pendant l'analyse
+    lastAggregationData = null; // Réinitialiser les données précédentes
+    globalProgressContainer.style.display = 'block';
+    globalProgress.value = 0;
+    globalProgressText.textContent = '0%';
+    globalErrorsStep1.innerHTML = ''; // Nettoyer erreurs précédentes
+    document.querySelectorAll('.remove-file-button').forEach(btn => btn.style.display = 'none'); // Cacher boutons X
+    fileList.querySelectorAll('.file-status-indicator').forEach(ind => { // Reset indicateurs
+         ind.className = 'file-status-indicator loading';
+         ind.title = 'Analyse en cours...';
+    });
+    analysisResultsCache = {}; // Vider le cache
+
+    const promises = [];
+    let completedCount = 0;
+
+    selectedFiles.forEach((file, index) => {
+        const formData = new FormData();
+        formData.append('screenshot', file);
+
+        const promise = fetch("{{ url_for('api_analyze_pokedex_single') }}", {
+            method: 'POST', body: formData
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, status: response.status, data })))
+        .then(({ ok, status, data }) => {
+            console.log(`Résultat INDIVIDUEL reçu pour index ${index} (Fichier: ${file.name}):`, data);
+            if(data && data.success && data.result) {
+                console.log(`  -> Présence de annotated_image_base64: ${data.result.hasOwnProperty('annotated_image_base64')}`);
+                if (data.result.annotated_image_base64) {
+                     console.log(`  -> Longueur base64: ${data.result.annotated_image_base64.length}`);
+                 } else {
+                     console.log(`  -> annotated_image_base64 est null ou absent.`);
+                 }
+            } else {
+                 console.log(`  -> Échec ou format de réponse inattendu.`);
+            }
+
+            const listItem = fileList.querySelector(`.file-list-item[data-index="${index}"]`);
+            const indicator = listItem?.querySelector('.file-status-indicator');
+            const feedbackSpan = listItem?.querySelector('.file-analysis-feedback');
+            analysisResultsCache[index] = data; // Stocker même en cas d'échec
+
+            let feedbackText = '';
+            if (ok && data.success && data.result) {
+                 if (indicator) indicator.className = 'file-status-indicator success';
+
+                 // === NOUVELLE LOGIQUE FEEDBACK ===
+                 const resultData = data.result;
+                 const seriesId = resultData.anchor_info?.major_series;
+                 const presentCount = resultData.detections?.filter(d => d.is_card && d.status?.includes("Présent") && !d.status?.includes("Implausible")).length || 0;
+                 // Récupérer le nouveau compte du backend (supposons qu'il s'appelle 'empty_slots_count')
+                 const emptySlotsCount = resultData.empty_slots_count || 0; // Mettre 0 par défaut si non fourni
+                 let seriesName = seriesId; // ID par défaut
+
+                 // Essayer de trouver le nom correspondant dans les données chargées
+                 if (seriesId && allSetsData) {
+                     const seriesInfo = allSetsData.find(s => s.set_id === seriesId);
+                     if (seriesInfo) {
+                         seriesName = seriesInfo.name; // Utiliser le nom si trouvé
+                     }
+                 }
+
+                 if (seriesId) {
+                    feedbackText = `${seriesName} - ${presentCount} Cartes / ${emptySlotsCount} Vides`;
+                 } else {
+                     // Cas où aucune série n'est détectée mais des slots sont vus ?
+                     feedbackText = `Analyse terminée (${presentCount} Cartes / ${emptySlotsCount} Vides)`;
+                 }
+                 // === FIN NOUVELLE LOGIQUE ===
+
+
+                 if (resultData.error) { // Erreur logique interne mais succès HTTP
+                     feedbackText += ` (Erreur: ${resultData.error})`;
+                     if(indicator) indicator.className = 'file-status-indicator error';
+                     console.error(`Erreur analyse fichier ${index}:`, resultData.error);
+                 } else {
+                      if(indicator) indicator.title = 'Succès';
+                 }
+            } else {
+                if (indicator) indicator.className = 'file-status-indicator error';
+                const errorMsg = data?.result?.error || data?.message || `Erreur ${status}`;
+                feedbackText = `Échec: ${errorMsg}`;
+                 if(indicator) indicator.title = feedbackText;
+                console.error(`Erreur HTTP/API fichier ${index}:`, errorMsg, data);
+            }
+             if (feedbackSpan) feedbackSpan.textContent = feedbackText;
+
+        })
+        .catch(error => {
+             console.error(`Erreur réseau fichier ${index}:`, error);
+             const listItem = fileList.querySelector(`.file-list-item[data-index="${index}"]`);
+             const indicator = listItem?.querySelector('.file-status-indicator');
+             const feedbackSpan = listItem?.querySelector('.file-analysis-feedback');
+             if (indicator) { indicator.className = 'file-status-indicator error'; indicator.title = `Erreur réseau: ${error.message}`; }
+             if (feedbackSpan) feedbackSpan.textContent = 'Erreur réseau';
+             // Stocker une erreur standardisée dans le cache
+             analysisResultsCache[index] = { success: false, result: { error: `Erreur réseau: ${error.message}`, filename: file.name } };
+        })
+        .finally(() => {
+            // Mettre à jour la progression globale après chaque analyse (succès ou échec)
+             completedCount++;
+             const progressValue = Math.round((completedCount / selectedFiles.length) * 100);
+             globalProgress.value = progressValue;
+             globalProgressText.textContent = `${progressValue}%`;
+        });
+        promises.push(promise);
+    });
+
+    // Attendre la fin de toutes les analyses individuelles
+    await Promise.allSettled(promises);
+
+    // Préparer les données pour l'agrégation backend
+    const resultsToSend = Object.values(analysisResultsCache).map(res => res);
+
+    // Appeler la nouvelle API d'agrégation
+    console.log("Envoi des résultats individuels pour agrégation:", resultsToSend);
+    try {
+        const response = await fetch("{{ url_for('api_aggregate_analysis_results') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ results: resultsToSend })
+        });
+        const aggregationData = await response.json();
+
+        if (response.ok && aggregationData.success) {
+            console.log("Résultats agrégés reçus:", aggregationData);
+            // Récupérer l'état utilisateur
+            try {
+                const statusResponse = await fetch("{{ url_for('get_user_cards_status') }}");
+                if (!statusResponse.ok) throw new Error('Erreur récupération statut utilisateur');
+                userCardsStatus = await statusResponse.json();
+                console.log("Statut collection utilisateur chargé:", userCardsStatus);
+
+                // === MODIFICATION ICI ===
+                // Stocker les données et afficher le bouton pour passer à l'étape 2
+                lastAggregationData = aggregationData; // Stocker les données
+                goToStep2Button.style.display = 'inline-block'; // Afficher le bouton
+                goToStep2Button.disabled = false;
+                processButton.textContent = 'Analyse terminée'; // Mettre à jour le texte du bouton analyse
+                // On NE LANCE PAS goToStep2() automatiquement ici
+                // === FIN MODIFICATION ===
+
+            } catch (statusError) {
+                 throw new Error(`Impossible de charger l'état de votre collection: ${statusError.message}`);
+            }
+        } else {
+            throw new Error(aggregationData.message || "Erreur lors de l'agrégation des résultats.");
+        }
+
+    } catch (error) {
+        console.error("Erreur lors de l'appel d'agrégation ou chargement statut:", error);
+        globalErrorsStep1.innerHTML = `<li>Erreur finale: ${error.message}</li>`;
+        // Réactiver l'UI de l'étape 1 pour permettre une nouvelle tentative
+        processingInProgress = false;
+        // Réactiver le bouton analyse SEULEMENT si l'étape 1 n'a pas de fichiers sélectionnés
+        processButton.textContent = 'Analyser les Fichiers';
+        processButton.disabled = (selectedFiles.length === 0);
+        document.querySelectorAll('.remove-file-button').forEach(btn => btn.style.display = '');
+        globalProgressContainer.style.display = 'none';
+        goToStep2Button.style.display = 'none'; // Cacher en cas d'erreur
+    } finally {
+        // Assurer que processingInProgress est false si tout s'est bien passé mais qu'on attend l'action user
+        if (lastAggregationData) { // Si on a réussi et stocké les données
+             processingInProgress = false; // Permettre d'interagir (ex: enlever fichier et réanalyser)
+             // Garder processButton désactivé car l'analyse est finie pour ce set de fichiers
+             processButton.disabled = true;
+        }
+    }
+});
+
+
+// --- Étape 2 : Affichage & Vérification (Modifié) ---
+
+let currentDetectedSeriesIds = [];
+let currentPresentKeys = new Set();
+
+function goToStep2(aggregationData) {
+    step1Content.style.display = 'none';
+    step2Content.style.display = 'block';
+    stepIndicator1.classList.remove('active');
+    stepIndicator1.classList.add('completed');
+    stepIndicator2.classList.add('active');
+    applyInitialStyles(); // S'assurer que les styles des étapes sont corrects
+    filterCardsInput.value = '';
+
+    currentDetectedSeriesIds = aggregationData.detected_series_ids || [];
+    currentPresentKeys = new Set(aggregationData.present_card_keys || []);
+
+    // Mise à jour du résumé
+    const seriesNames = currentDetectedSeriesIds
+        .map(id => allSetsData.find(s => s.set_id === id)?.name || id)
+        .join(', ') || 'Aucune';
+    detectedSeriesList.textContent = seriesNames;
+    aiPresentCount.textContent = currentPresentKeys.size;
+
+    // Afficher les erreurs/warnings de l'agrégation
+    if (aggregationData.errors && aggregationData.errors.length > 0) {
+         aggregationWarnings.innerHTML = "<strong>Avertissements / Erreurs d'agrégation :</strong><ul>" +
+                                      aggregationData.errors.map(e => `<li>${e}</li>`).join('') +
+                                      "</ul>";
+    } else {
+        aggregationWarnings.innerHTML = '';
+    }
+
+    populateVerificationGrid();
+
+    // Afficher la revue immédiatement si des fichiers ont été analysés
+    if (selectedFiles.length > 0 && Object.keys(analysisResultsCache).length > 0) {
+        console.log("Appel de showReviewer(0) depuis goToStep2.");
+        showReviewer(0); // Affiche la section et le premier screenshot
+    } else {
+        console.warn("Pas de fichiers sélectionnés ou de cache d'analyse pour afficher la revue automatiquement.");
+        reviewSection.style.display = 'none'; // Garder caché si pas de revue à faire
+        // Inutile de cacher reviewDetectedCardsContainer spécifiquement car il est dans reviewSection
+    }
+}
+
+async function populateVerificationGrid() {
+    verificationGrid.innerHTML = '';
+    loadingVerificationGridMsg.style.display = 'block';
+    noCardsFoundStep2Msg.style.display = 'none';
+    saveButton.disabled = true;
+
+    if (currentDetectedSeriesIds.length === 0) {
+        loadingVerificationGridMsg.textContent = "Aucune série n'a été détectée dans les images.";
+        noCardsFoundStep2Msg.style.display = 'block';
+        return;
+    }
+
+    let totalAlreadyOwned = 0;
+    let totalNewlyDetected = 0;
+    let cardsDisplayed = false;
+
+    for (const seriesId of currentDetectedSeriesIds) {
+        try {
+            const response = await fetch(`{{ url_for('get_set_cards') }}?set_id=${seriesId}`);
+            if (!response.ok) throw new Error(`Erreur chargement cartes pour ${seriesId}`);
+            const setCards = await response.json();
+
+            if (setCards && setCards.length > 0) {
+                 cardsDisplayed = true;
+                 loadingVerificationGridMsg.style.display = 'none';
+
+                const separatorClone = seriesSeparatorTemplate.content.cloneNode(true);
+                const seriesInfo = allSetsData.find(s => s.set_id === seriesId);
+                separatorClone.querySelector('.series-name').textContent = seriesInfo?.name || seriesId;
+                separatorClone.querySelector('.series-id').textContent = seriesId;
+                verificationGrid.appendChild(separatorClone);
+
+                setCards.sort((a, b) => {
+                     const numA = parseInt(String(a.card_number).match(/\d+/)?.[0] || '0', 10);
+                     const numB = parseInt(String(b.card_number).match(/\d+/)?.[0] || '0', 10);
+                     return numA - numB;
+                 });
+
+                setCards.forEach(card => {
+                    const cardKey = `${card.set_id}-${card.card_number}`;
+                    const isAiDetected = currentPresentKeys.has(cardKey);
+                    const ownedInfo = userCardsStatus.extra_dict[cardKey];
+                    const isAlreadyOwned = !!ownedInfo && ownedInfo > 0;
+                    const ownedQuantity = isAlreadyOwned ? ownedInfo : 0;
+                    const isNewlyDetected = isAiDetected && !isAlreadyOwned;
+                    const isWanted = userCardsStatus.wanted_dict[cardKey];
+
+                    const cardClone = verificationCardTemplate.content.cloneNode(true);
+                    const cardBox = cardClone.querySelector('.card-box');
+                    const img = cardClone.querySelector('.card-img');
+                    const placeholder = cardClone.querySelector('.placeholder-number');
+                    const nameTag = cardClone.querySelector('.card-name-tag');
+                    const numberBadge = cardClone.querySelector('.card-number-badge');
+                    const quantityControl = cardClone.querySelector('.quantity-control');
+                    const quantityDisplay = cardClone.querySelector('.quantity-display');
+
+                    cardBox.dataset.cardKey = cardKey;
+                    cardBox.dataset.setId = card.set_id;
+                    cardBox.dataset.cardNumber = card.card_number;
+                    cardBox.dataset.cardNameSort = (card.french_name || card.card_name || '').toLowerCase();
+                     const numMatch = String(card.card_number).match(/\d+/);
+                    cardBox.dataset.cardNumberSort = numMatch ? parseInt(numMatch[0], 10) : 0;
+                    cardBox.dataset.currentQuantity = ownedQuantity;
+
+                    nameTag.textContent = card.french_name || card.card_name || 'Nom inconnu';
+                    numberBadge.textContent = card.card_number;
+
+                    cardBox.classList.add('missing');
+
+                    if (isAlreadyOwned) {
+                         cardBox.classList.remove('missing');
+                         cardBox.classList.add('already-owned');
+                         totalAlreadyOwned++;
+                         img.src = card.image_url || '{{ url_for("static", filename="placeholder.png") }}';
+                         img.alt = nameTag.textContent;
+                         img.style.display = 'block';
+                         placeholder.style.display = 'none';
+                         quantityDisplay.textContent = `x${ownedQuantity}`;
+                         quantityControl.style.display = 'flex';
+                    }
+
+                    if (isAiDetected) {
+                        cardBox.classList.remove('missing');
+                        cardBox.classList.add('ai-detected');
+                        if (isNewlyDetected) {
+                            cardBox.classList.add('newly-detected');
+                            totalNewlyDetected++;
+                            cardBox.dataset.currentQuantity = 1;
+                            quantityDisplay.textContent = 'x1';
+                        }
+                         if (!isAlreadyOwned) {
+                             img.src = card.image_url || '{{ url_for("static", filename="placeholder.png") }}';
+                             img.alt = nameTag.textContent;
+                             img.style.display = 'block';
+                             placeholder.style.display = 'none';
+                             quantityControl.style.display = 'flex';
+                         }
+                    }
+
+                    cardBox.addEventListener('click', handleCardToggle);
+                    cardClone.querySelector('.quantity-increase').addEventListener('click', handleQuantityChange);
+                    cardClone.querySelector('.quantity-decrease').addEventListener('click', handleQuantityChange);
+
+                    verificationGrid.appendChild(cardClone);
+                });
+            }
+
+        } catch (error) {
+            console.error(`Erreur chargement série ${seriesId}:`, error);
+             const errorMsg = document.createElement('p');
+             errorMsg.textContent = `Erreur chargement série ${seriesId}: ${error.message}`;
+             errorMsg.style.color = 'red';
+             errorMsg.style.gridColumn = '1 / -1';
+             verificationGrid.appendChild(errorMsg);
+        }
+    }
+
+    alreadyOwnedCount.textContent = totalAlreadyOwned;
+    newlyDetectedCount.textContent = totalNewlyDetected;
+
+    if (!cardsDisplayed) {
+         loadingVerificationGridMsg.style.display = 'none';
+         noCardsFoundStep2Msg.style.display = 'block';
+         noCardsFoundStep2Msg.textContent = "Aucune carte trouvée pour les séries spécifiées ou erreur de chargement.";
+    } else {
+        saveButton.disabled = false;
+        applyStep2Filters();
+    }
+}
+
+function updateCardState(cardBox, newState) {
+    cardBox.classList.remove('missing', 'already-owned', 'ai-detected', 'newly-detected', 'manually-added', 'marked-for-removal');
+    cardBox.classList.add(newState);
+
+    const img = cardBox.querySelector('.card-img');
+    const placeholder = cardBox.querySelector('.placeholder-number');
+    const quantityControl = cardBox.querySelector('.quantity-control');
+    const cardData = allCardsData[cardBox.dataset.cardKey] || {};
+
+    img.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = cardBox.dataset.cardNumber;
+    quantityControl.style.display = 'none';
+
+    if (newState !== 'missing' && newState !== 'marked-for-removal') {
+        img.src = cardData.image_url || '{{ url_for("static", filename="placeholder.png") }}';
+        img.alt = cardData.french_name || cardData.card_name || 'Carte';
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+        quantityControl.style.display = 'flex';
+         const currentQty = parseInt(cardBox.dataset.currentQuantity, 10);
+         if (currentQty < 1) {
+            updateQuantityDisplay(cardBox, 1);
+         }
+
+    } else {
+         updateQuantityDisplay(cardBox, 0);
+    }
+}
+
+function handleCardToggle(event) {
+    if (event.target.closest('.quantity-control')) {
+        return;
+    }
+
+    const cardBox = event.currentTarget;
+    const currentQty = parseInt(cardBox.dataset.currentQuantity, 10);
+
+    if (currentQty === 0 || cardBox.classList.contains('missing') || cardBox.classList.contains('marked-for-removal')) {
+        updateCardState(cardBox, 'manually-added');
+    } else {
+        updateCardState(cardBox, 'marked-for-removal');
+    }
+}
+
+function updateQuantityDisplay(cardBox, newQuantity) {
+    const quantityDisplay = cardBox.querySelector('.quantity-display');
+    const decreaseButton = cardBox.querySelector('.quantity-decrease');
+
+    cardBox.dataset.currentQuantity = newQuantity;
+    quantityDisplay.textContent = `x${newQuantity}`;
+
+    if(newQuantity > 1) {
+         cardBox.classList.add('has-multiple');
+     } else {
+          cardBox.classList.remove('has-multiple');
+     }
+
+    decreaseButton.disabled = (newQuantity <= 0);
+
+    if (newQuantity <= 0 && !cardBox.classList.contains('missing')) {
+        updateCardState(cardBox, 'marked-for-removal');
+    } else if (newQuantity > 0 && (cardBox.classList.contains('missing') || cardBox.classList.contains('marked-for-removal'))) {
+        // On ne reclassifie que si elle n'est pas déjà marquée comme possédée ou détectée
+        if (!cardBox.classList.contains('already-owned') && !cardBox.classList.contains('ai-detected') && !cardBox.classList.contains('manually-added')) {
+             updateCardState(cardBox, 'manually-added');
+        } else {
+             // Si elle était marquée pour suppression mais est already-owned ou ai-detected, on la remet dans son état d'origine
+             cardBox.classList.remove('marked-for-removal');
+             if(cardBox.classList.contains('already-owned')) updateCardState(cardBox, 'already-owned');
+             else if (cardBox.classList.contains('ai-detected')) { // Inclut newly-detected
+                 if(cardBox.classList.contains('newly-detected')) updateCardState(cardBox, 'newly-detected');
+                 else updateCardState(cardBox, 'ai-detected'); // Cas ai-detected mais pas newly (devrait pas arriver si 0 -> 1)
+             }
+        }
+    }
+}
+
+
+function handleQuantityChange(event) {
+    event.stopPropagation();
+    const button = event.currentTarget;
+    const cardBox = button.closest('.card-box');
+    let currentQuantity = parseInt(cardBox.dataset.currentQuantity, 10);
+
+    if (button.classList.contains('quantity-increase')) {
+        currentQuantity++;
+    } else if (button.classList.contains('quantity-decrease')) {
+        currentQuantity = Math.max(0, currentQuantity - 1);
+    }
+
+    updateQuantityDisplay(cardBox, currentQuantity);
+}
+
+function applyStep2Filters() {
+    const filterText = filterCardsInput.value.toLowerCase().trim();
+    let visibleCardCount = 0;
+
+    // Itérer sur tous les éléments de la grille
+    verificationGrid.childNodes.forEach(node => {
+         // Ignorer les nœuds qui ne sont pas des éléments (comme les nœuds texte)
+         if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+        if (node.classList.contains('series-separator')) {
+            // TOUJOURS afficher les séparateurs pour l'instant
+            node.style.display = '';
+        } else if (node.classList.contains('card-box')) {
+            const card = node;
+             const cardName = (card.querySelector('.card-name-tag')?.textContent || '').toLowerCase();
+             const cardNumber = card.dataset.cardNumber || '';
+             // Déterminer si la carte doit être visible
+             const isVisible = cardName.includes(filterText) || cardNumber.includes(filterText);
+             // Afficher ou masquer la carte
+             card.style.display = isVisible ? '' : 'none';
+             // Compter les cartes visibles
+             if (isVisible) {
+                 visibleCardCount++;
+             }
+        } else {
+            // Afficher d'autres types de nœuds (ex: messages d'erreur)
+            node.style.display = '';
+        }
+    });
+
+    // Gérer le message "aucun résultat" basé uniquement sur les cartes visibles
+    // S'assurer que `verificationGrid.children.length > 0` pour ne pas l'afficher pendant le chargement initial.
+    const hasAnyCardsOrSeparators = Array.from(verificationGrid.children).some(el => el.classList.contains('card-box') || el.classList.contains('series-separator'));
+    noCardsFoundStep2Msg.style.display = (visibleCardCount === 0 && hasAnyCardsOrSeparators) ? 'block' : 'none';
+    loadingVerificationGridMsg.style.display = 'none'; // S'assurer que le chargement est caché après le premier filtrage
+}
+filterCardsInput.addEventListener('input', applyStep2Filters); // Relier le filtre
+
+
+backButton.addEventListener('click', () => {
+    step2Content.style.display = 'none';
+    step1Content.style.display = 'block';
+    stepIndicator2.classList.remove('active');
+    stepIndicator1.classList.remove('completed');
+    stepIndicator1.classList.add('active');
+    applyInitialStyles();
+
+    verificationGrid.innerHTML = '';
+    loadingVerificationGridMsg.textContent = 'Chargement des données utilisateur et des cartes...'; // Message par défaut
+    loadingVerificationGridMsg.style.display = 'block';
+    noCardsFoundStep2Msg.style.display = 'none';
+    detectedSeriesList.textContent = 'Chargement...';
+    aiPresentCount.textContent = '0';
+    alreadyOwnedCount.textContent = '0';
+    newlyDetectedCount.textContent = '0';
+    aggregationWarnings.innerHTML = '';
+    saveButton.disabled = true;
+    saveStatusContainer.style.display = 'none';
+    filterCardsInput.value = '';
+
+    processingInProgress = false;
+    // === Modification : Ne pas réactiver processButton si l'analyse a réussi ===
+    if (!lastAggregationData) { // Si on revient AVANT une analyse réussie
+        processButton.textContent = 'Analyser les Fichiers';
+    processButton.disabled = (selectedFiles.length === 0);
+    } else { // Si on revient APRES une analyse réussie (lastAggregationData existe)
+        processButton.textContent = 'Analyse terminée';
+        processButton.disabled = true; // Garder désactivé, analyse déjà faite
+        goToStep2Button.style.display = 'inline-block'; // Garder le bouton étape 2 visible
+    }
+    // === Fin Modification ===
+    document.querySelectorAll('.remove-file-button').forEach(btn => btn.style.display = '');
+    fileList.querySelectorAll('.file-analysis-feedback').forEach(span => span.textContent = ''); // Nettoyer feedback individuels
+    globalProgressContainer.style.display = 'none';
+
+
+    // Assurer que la section revue ET la liste sont cachées
+    reviewSection.style.display = 'none';
+    // reviewDetectedCardsContainer est DANS reviewSection, pas besoin de le cacher en plus
+    reviewDetectedCardsGrid.innerHTML = '';
+    currentReviewIndex = -1;
+    removeReviewHighlights(); // Important si on revient
+
+    // Inutile de cacher goToStep2Button ici si lastAggregationData existe (voir modif plus haut)
+    // Ne pas réinitialiser lastAggregationData ici, pour pouvoir re-cliquer sur "Voir les résultats"
+});
+
+
+saveButton.addEventListener('click', async () => {
+    saveButton.disabled = true;
+    saveButton.textContent = 'Sauvegarde...';
+    saveStatusContainer.style.display = 'block';
+    saveStatus.textContent = 'Préparation des données...';
+    saveStatus.style.color = 'inherit';
+
+    const cardsToUpdate = [];
+    const cardsToMarkAsWanted = []; // NOUVELLE LISTE
+
+    verificationGrid.querySelectorAll('.card-box').forEach(cardBox => {
+        const finalQuantity = parseInt(cardBox.dataset.currentQuantity, 10);
+        const setId = cardBox.dataset.setId;
+        const cardNumber = cardBox.dataset.cardNumber;
+
+        // Logique existante pour la mise à jour de la quantité
+        cardsToUpdate.push({
+            set_id: setId,
+            card_number: cardNumber,
+            quantity: finalQuantity
+        });
+
+        // NOUVEAU : Vérifier si la carte doit être marquée comme recherchée
+        // Condition : La carte est marquée comme manquante ET n'a pas été ajoutée/possédée manuellement ou via IA
+        const isMissing = cardBox.classList.contains('missing');
+        const isNotOwnedOrAdded = !cardBox.classList.contains('already-owned') &&
+                                !cardBox.classList.contains('ai-detected') && // Inclut newly-detected implicitement
+                                !cardBox.classList.contains('manually-added');
+        const isNotMarkedForRemoval = !cardBox.classList.contains('marked-for-removal');
+
+        if (finalQuantity === 0 && isMissing && isNotOwnedOrAdded && isNotMarkedForRemoval) {
+             console.log(`[Save] Marquage comme recherchée: ${setId}-${cardNumber}`);
+             cardsToMarkAsWanted.push({
+                 set_id: setId,
+                 card_number: cardNumber
+             });
+        }
+    });
+
+    const saveData = {
+        cards_to_update: cardsToUpdate,
+        cards_to_mark_as_wanted: cardsToMarkAsWanted // AJOUT DE LA NOUVELLE LISTE
+    };
+
+    console.log("Données finales envoyées pour sauvegarde :", saveData);
+
+     try {
+        const response = await fetch("{{ url_for('api_update_collection_from_scan') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(saveData)
+        });
+         const data = await response.json();
+
+         if (response.ok && data.success) {
+             saveStatus.textContent = data.message || 'Collection mise à jour ! Redirection...';
+             saveStatus.style.color = 'green';
+             if (data.wanted_added_count && data.wanted_added_count > 0) {
+                 saveStatus.innerHTML += `<br><small style='color: #48bb78;'>${data.wanted_added_count} carte(s) ajoutée(s) aux recherches.</small>`;
+             }
+             if (data.errors && data.errors.length > 0) {
+                  saveStatus.innerHTML += "<br><small style='color: orange;'>Avertissements: " + data.errors.join(', ') + "</small>";
+             }
+             // Mettre à jour le cache local userCardsStatus APRES sauvegarde réussie
+             await fetchUserCardsStatus(); // Recharger l'état
+             setTimeout(() => { window.location.href = "{{ url_for('dashboard') }}"; }, 2500);
+         } else {
+             throw new Error(data.message || `Erreur HTTP ${response.status}`);
+         }
+
+     } catch (error) {
+        console.error('Erreur sauvegarde:', error);
+        saveStatus.textContent = `Erreur: ${error.message}.`;
+        saveStatus.style.color = 'var(--danger-color)';
+        saveButton.disabled = false;
+        saveButton.textContent = 'Sauvegarder ma Sélection';
+     }
+});
+
+// === NOUVEAU : Fonction séparée pour fetch le statut user ===
+async function fetchUserCardsStatus() {
+     try {
+        const statusResponse = await fetch("{{ url_for('get_user_cards_status') }}");
+        if (!statusResponse.ok) throw new Error('Erreur récupération statut utilisateur');
+        userCardsStatus = await statusResponse.json();
+        console.log("Statut collection utilisateur (re)chargé:", userCardsStatus);
+     } catch (error) {
+         console.error("Impossible de (re)charger l'état de la collection:", error);
+         // Afficher une erreur quelque part ? Peut-être dans aggregationWarnings ?
+         aggregationWarnings.innerHTML += `<p style="color: var(--danger-color);">Erreur critique : Impossible de charger l'état actuel de votre collection. Les informations affichées pourraient être incorrectes.</p>`;
+         // Mettre un état par défaut pour éviter les erreurs JS ?
+         userCardsStatus = { extra_dict: {}, wanted_dict: {} };
+     }
+}
+
+
+function applyInitialStyles() {
+    document.querySelectorAll('.step-indicator').forEach(el => { el.style.display = 'flex'; el.style.flexDirection = 'column'; el.style.alignItems = 'center'; el.style.textAlign = 'center'; el.style.flex = '1'; el.style.opacity = '0.5'; });
+    document.querySelectorAll('.step-circle').forEach(el => { el.style.width = '30px'; el.style.height = '30px'; el.style.borderRadius = '50%'; el.style.backgroundColor = '#cbd5e0'; el.style.color = 'white'; el.style.display = 'flex'; el.style.alignItems = 'center'; el.style.justifyContent = 'center'; el.style.fontWeight = 'bold'; el.style.marginBottom = '8px'; el.style.transition = 'all 0.3s ease'; });
+    document.querySelectorAll('.step-label').forEach(el => { el.style.fontSize = '0.9em'; el.style.color = '#4A5568'; });
+    let connector = document.querySelector('.step-connector'); if (!connector) { connector = document.createElement('div'); connector.classList.add('step-connector'); connector.style.height = '2px'; connector.style.backgroundColor = '#e2e8f0'; connector.style.flexGrow = '1'; connector.style.margin = '0 15px'; connector.style.position = 'relative'; connector.style.top = '15px'; if (stepIndicator1) stepIndicator1.after(connector); }
+    document.querySelectorAll('.step-indicator').forEach(el => { const circle = el.querySelector('.step-circle'); if (el.classList.contains('completed')) { el.style.opacity = '1'; if(circle) circle.style.backgroundColor = '#4CAF50'; } else if (el.classList.contains('active')) { el.style.opacity = '1'; if(circle) circle.style.backgroundColor = 'var(--primary-color)'; } else { el.style.opacity = '0.5'; if(circle) circle.style.backgroundColor = '#cbd5e0'; } });
+}
+applyInitialStyles();
+
+// --- Fonctions pour la Revue (Section Modifiée) ---
+function showReviewer(startIndex = 0) {
+    console.log("showReviewer appelée ! Index:", startIndex);
+    if (selectedFiles.length === 0 || !analysisResultsCache || Object.keys(analysisResultsCache).length === 0) {
+        console.warn("Tentative d'appel à showReviewer sans fichiers/résultats valides.");
+        reviewSection.style.display = 'none'; // Assurer qu'elle est cachée
+        return;
+    }
+    // Afficher la section principale de revue (qui contient les deux panneaux)
+    reviewSection.style.display = 'flex';
+    // Le conteneur de la grille est DANS le panneau droit, son affichage 'block' est géré dans populateReviewDetectedCardsGrid
+
+    currentReviewIndex = Math.max(0, Math.min(startIndex, selectedFiles.length - 1));
+    console.log(`Affichage de la revue pour l'index ${currentReviewIndex}`);
+    displayReviewContent(currentReviewIndex); // Nouvelle fonction pour gérer l'affichage des DEUX panneaux
+    updateReviewButtons();
+    // Optionnel: Scroll vers la section de revue si elle n'est pas visible
+    // reviewSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// --- NOUVEAU : Gère l'affichage des deux panneaux ---
+function displayReviewContent(index) {
+    console.log(`displayReviewContent appelé pour index: ${index}.`);
+    const cachedResult = analysisResultsCache[index];
+    const file = selectedFiles[index];
+
+    // --- Affichage Panneau Gauche (Image + Contrôles) ---
+    reviewFileInfo.textContent = `Capture ${index + 1} / ${selectedFiles.length} : ${file?.name || 'Nom inconnu'}`;
+    reviewPlaceholderText.style.display = 'block'; // Afficher chargement initialement
+    reviewScreenshotImage.style.display = 'none'; // Cacher l'ancienne image
+    reviewScreenshotImage.style.opacity = '0';
+    reviewScreenshotImage.src = ''; // Vider src
+
+    if (cachedResult && cachedResult.success && cachedResult.result) {
+    const resultData = cachedResult.result;
+    const base64ImageData = resultData.annotated_image_base64;
+
+    if (base64ImageData) {
+            reviewPlaceholderText.style.display = 'none';
+        console.log("Image base64 reçue. Tentative d'affichage...");
+            // Utiliser onload pour gérer l'opacité APRES chargement
+            reviewScreenshotImage.onload = () => {
+        reviewScreenshotImage.style.display = 'block';
+        reviewScreenshotImage.style.opacity = '1';
+                 console.log("Image de revue chargée et affichée.");
+                 reviewScreenshotImage.onload = null; // Nettoyer
+            }
+             reviewScreenshotImage.onerror = () => {
+                 console.error("Erreur chargement image base64 dans l'élément img pour index", index);
+                 reviewPlaceholderText.textContent = `Erreur: Impossible d'afficher l'image annotée.`;
+                 reviewPlaceholderText.style.display = 'block';
+                 reviewScreenshotImage.style.display = 'none';
+                 reviewScreenshotImage.onerror = null; // Nettoyer
+            }
+            reviewScreenshotImage.src = 'data:image/jpeg;base64,' + base64ImageData;
+
+    } else {
+        console.error("Image base64 manquante pour l'index", index);
+        reviewPlaceholderText.textContent = `Erreur: Image annotée non disponible.`;
+        }
+
+        // --- Peuplement Panneau Droit (Grille) ---
+        populateReviewDetectedCardsGrid(index, resultData); // Peuple la grille dans le panneau droit
+
+    } else {
+        console.error(`Cache invalide ou échec analyse pour index ${index}.`);
+        reviewPlaceholderText.textContent = `Erreur: Données d'analyse non disponibles pour cette capture.`;
+        // Vider aussi la grille de droite en cas d'erreur
+        reviewDetectedCardsGrid.innerHTML = '';
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = `Données d'analyse non disponibles.`;
+        noReviewGridFoundMsg.style.display = 'block';
+        reviewDetectedCardsContainer.style.display = 'block'; // Montrer le conteneur avec le message d'erreur
+    }
+
+    // --- Mise à jour état et highlights ---
+    highlightCardsForReview(index); // Met en évidence les cartes DANS LA GRILLE DE VÉRIFICATION (pas la grille de revue)
+    updateReviewButtons(); // Met à jour Préc/Suiv
+}
+
+
+// --- MODIFIÉ : Fonction pour peupler la GRILLE de la revue (Panneau Droit) ---
+function populateReviewDetectedCardsGrid(imageIndex, resultData) {
+    console.log(`[ReviewGrid] Peuplement pour index ${imageIndex}`);
+    reviewDetectedCardsGrid.innerHTML = ''; // Vider la grille
+    loadingReviewGridMsg.style.display = 'block'; // Afficher chargement
+    noReviewGridFoundMsg.style.display = 'none'; // Cacher "pas trouvé"
+    reviewDetectedCardsContainer.style.display = 'block'; // S'assurer que le conteneur est visible
+
+    // Vérifications initiales (importantes)
+    if (!resultData || !resultData.grid_info || !resultData.detections) {
+         console.error(`[ReviewGrid] Données manquantes (resultData, grid_info ou detections) pour index ${imageIndex}`);
+         loadingReviewGridMsg.style.display = 'none';
+         noReviewGridFoundMsg.textContent = "Données de grille ou détections manquantes.";
+         noReviewGridFoundMsg.style.display = 'block';
+         return;
+    }
+
+    const detections = resultData.detections;
+    const gridInfo = resultData.grid_info;
+    const gridCols = gridInfo.cols_used > 0 ? gridInfo.cols_used : 5; // Utiliser cols_used si > 0, sinon 5 par défaut
+    const numRows = gridInfo.rows > 0 ? gridInfo.rows : (detections.length > 0 ? Math.ceil(detections.length / gridCols) : 0); // Calculer lignes si nécessaire
+    const seriesId = resultData.anchor_info?.major_series;
+
+    console.log(`[ReviewGrid] Création grille ${numRows}x${gridCols}. Série: ${seriesId || 'Non détectée'}`);
+    reviewDetectedCardsGrid.style.gridTemplateColumns = `repeat(${gridCols}, 1fr)`;
+
+    // Créer une map pour accéder rapidement aux détections par position
+    const detectionMap = new Map();
+    detections.forEach(det => {
+        if (det.row !== undefined && det.col !== undefined && det.row >= 0 && det.col >= 0) {
+            detectionMap.set(`${det.row}-${det.col}`, det);
+        } else {
+            // Optionnel: Gérer les détections sans position (ex: hors grille) si nécessaire
+             console.warn("[ReviewGrid] Détection sans position valide:", det);
+        }
+    });
+
+    let slotsPopulated = 0;
+    if (numRows === 0) { // Si aucune ligne n'est définie et aucune détection n'a été trouvée
+        console.log("[ReviewGrid] Aucune ligne ou détection, affichage message 'pas de grille'.");
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.style.display = 'block';
+        return;
+    }
+
+
+    for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < gridCols; c++) {
+            const det = detectionMap.get(`${r}-${c}`);
+            const slotClone = reviewGridSlotTemplate.content.cloneNode(true);
+            const slotDiv = slotClone.querySelector('.review-grid-slot');
+            const img = slotClone.querySelector('.review-card-img');
+            const placeholder = slotClone.querySelector('.review-card-placeholder');
+            const numberSpan = slotClone.querySelector('.review-card-number');
+
+            let slotStatus = 'empty-inferred'; // Statut par défaut si aucune détection à cet emplacement
+            let cardKey = '';
+            let predictedNumStr = ''; // Numéro texte à afficher (placeholder ou badge)
+            slotDiv.title = `Emplacement vide (${r},${c})`; // Titre par défaut
+
+            if (det) {
+                 // Une détection existe pour ce slot
+                slotStatus = det.status || 'unknown';
+                const predictedNumber = det.predicted_number; // Peut être null
+                const isCard = det.is_card; // true/false
+                predictedNumStr = predictedNumber != null ? String(predictedNumber) : '?';
+                placeholder.textContent = predictedNumStr; // Afficher le numéro prédit dans le placeholder
+
+                 // Déterminer si c'est une carte plausible à afficher
+                 // Conditions: is_card=true, status contient "Présent", status ne contient PAS "Implausible", un numéro est prédit, et une série est connue
+                const isPlausibleCard = isCard &&
+                                        slotStatus.includes("Présent") &&
+                                        !slotStatus.includes("Implausible") &&
+                                        predictedNumber != null &&
+                                        seriesId;
+
+                if (isPlausibleCard) {
+                    slotStatus = 'present'; // Clarifier le statut interne
+                    cardKey = `${seriesId}-${predictedNumber}`;
+                    slotDiv.dataset.cardKey = cardKey; // Stocker la clé pour référence future éventuelle
+                    numberSpan.textContent = predictedNumStr; // Mettre le numéro dans le badge
+
+                    // Essayer de trouver l'image officielle
+                    const cardData = allCardsData[cardKey];
+                    if (cardData && cardData.image_url) {
+                         console.log(`[ReviewGrid Slot ${r}-${c}] Carte ${cardKey} trouvée. URL: ${cardData.image_url}`);
+                         img.onload = () => { img.style.display = 'block'; placeholder.style.display = 'none'; };
+                         img.onerror = () => { console.error(`Erreur chargement image pour ${cardKey}`); img.style.display = 'none'; placeholder.style.display = 'flex'; placeholder.textContent = predictedNumStr + ' ERR';};
+                            img.src = cardData.image_url;
+                            img.alt = cardData.french_name || cardData.card_name || cardKey;
+                            slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte inconnue'} (${cardKey})`;
+                        } else {
+                         console.warn(`[ReviewGrid Slot ${r}-${c}] Carte ${cardKey} non trouvée ou sans image dans allCardsData.`);
+                         img.style.display = 'none'; placeholder.style.display = 'flex'; placeholder.textContent = predictedNumStr + ' (?)';
+                         slotDiv.title = `Carte ${cardKey} détectée mais info manquante`;
+                         slotStatus = 'present-no-data'; // Statut spécifique si besoin
+                    }
+                } else if (isCard) {
+                     // Détecté comme carte, mais pas 'Présent' ou 'Implausible' etc.
+                     slotStatus = 'detected-issue'; // Regrouper les cas problématiques
+                     img.style.display = 'none'; placeholder.style.display = 'flex';
+                     placeholder.textContent = predictedNumStr + ' !'; // Marquer le problème
+                     numberSpan.textContent = predictedNumStr;
+                     slotDiv.title = `Problème détection (${det.status || 'statut inconnu'}) - Numéro ${predictedNumStr}`;
+                } else {
+                     // Détecté, mais PAS une carte (ex: slot vide attendu)
+                     slotStatus = 'empty-slot';
+                     img.style.display = 'none'; placeholder.style.display = 'flex';
+                     placeholder.textContent = predictedNumStr; // Peut être utile de voir le numéro attendu
+                     numberSpan.textContent = ''; // Pas de numéro de carte
+                     slotDiv.title = `Emplacement vide détecté (attendu ${predictedNumStr})`;
+                }
+
+            } else {
+                // Aucune détection pour ce slot (r, c) -> Vide inféré
+                slotStatus = 'empty-inferred';
+                img.style.display = 'none'; placeholder.style.display = 'flex';
+                placeholder.textContent = ''; // Pas de numéro
+                numberSpan.textContent = '';
+                slotDiv.title = `Emplacement vide (${r},${c})`;
+            }
+
+            // Appliquer la classe CSS basée sur le statut final
+            slotDiv.className = 'review-grid-slot'; // Reset classes
+            slotDiv.classList.add(`status-${slotStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+            slotDiv.dataset.status = slotStatus; // Stocker le statut calculé
+
+            reviewDetectedCardsGrid.appendChild(slotClone);
+            slotsPopulated++;
+        }
+    }
+
+    loadingReviewGridMsg.style.display = 'none'; // Cacher chargement
+    noReviewGridFoundMsg.style.display = (slotsPopulated === 0) ? 'block' : 'none'; // Afficher si rien n'a été ajouté
+    console.log(`[ReviewGrid] Fin peuplement. ${slotsPopulated} slots ajoutés à la grille.`);
+}
+
+
+// --- Fonction pour mettre en évidence les cartes dans la GRILLE DE VERIFICATION (inchangée pour l'instant) ---
+function highlightCardsForReview(imageIndex) {
+    removeReviewHighlights(); // Nettoyer les highlights précédents
+
+    const cachedResult = analysisResultsCache[imageIndex];
+    if (!cachedResult || !cachedResult.success || !cachedResult.result || !cachedResult.result.detections || !cachedResult.result.anchor_info?.major_series) {
+        console.warn(`Données incomplètes pour highlight review de l'index ${imageIndex}`);
+        return;
+    }
+    const resultData = cachedResult.result;
+    const seriesId = resultData.anchor_info.major_series;
+    const detectedInThisImage = new Set();
+
+    resultData.detections.forEach(det => {
+        const predictedNumber = det.predicted_number;
+        const status = det.status || "";
+        const isCard = det.is_card;
+        const isPlausible = !status.includes("Implausible") && predictedNumber != null;
+
+        if (isCard && status.includes("Présent") && isPlausible) {
+            const cardKey = `${seriesId}-${predictedNumber}`;
+            detectedInThisImage.add(cardKey);
+        }
+    });
+
+    console.log(`Highlight: Cartes à mettre en évidence dans la grille principale pour image ${imageIndex}:`, detectedInThisImage);
+    let highlightedCount = 0;
+    verificationGrid.querySelectorAll('.card-box').forEach(cardBox => {
+        if (detectedInThisImage.has(cardBox.dataset.cardKey)) {
+            cardBox.classList.add('highlight-review');
+            highlightedCount++;
+        }
+    });
+    console.log(`Highlight: ${highlightedCount} cartes mises en évidence.`);
+}
+
+// --- Fonction pour enlever la mise en évidence (inchangée) ---
+function removeReviewHighlights() {
+    verificationGrid.querySelectorAll('.card-box.highlight-review').forEach(cardBox => {
+        cardBox.classList.remove('highlight-review');
+    });
+}
+
+
+// --- Mettre à jour état boutons Nav Revue (inchangée) ---
+function updateReviewButtons() {
+    reviewPrevButton.disabled = (currentReviewIndex <= 0);
+    reviewNextButton.disabled = (currentReviewIndex >= selectedFiles.length - 1);
+}
+
+// --- Listeners pour les boutons de Revue (Modifiés pour utiliser displayReviewContent) ---
+reviewPrevButton.addEventListener('click', () => {
+    if (currentReviewIndex > 0) {
+        currentReviewIndex--;
+        displayReviewContent(currentReviewIndex); // Utiliser la nouvelle fonction
+        // updateReviewButtons(); // Déjà appelé dans displayReviewContent
+    }
+});
+
+reviewNextButton.addEventListener('click', () => {
+    if (currentReviewIndex < selectedFiles.length - 1) {
+        currentReviewIndex++;
+        displayReviewContent(currentReviewIndex); // Utiliser la nouvelle fonction
+        // updateReviewButtons(); // Déjà appelé dans displayReviewContent
+    }
+});
+
+closeReviewButton.addEventListener('click', () => {
+    reviewSection.style.display = 'none'; // Cacher toute la section
+    reviewDetectedCardsGrid.innerHTML = ''; // Vider la GRILLE de revue
+    reviewScreenshotImage.src = ''; // Vider l'image
+    currentReviewIndex = -1;
+    removeReviewHighlights(); // Enlever les highlights de la grille principale
+});
+
+// --- Listener pour le bouton "Voir les résultats" (inchangé) ---
+goToStep2Button.addEventListener('click', () => {
+    console.log('Bouton "Voir les résultats & Vérifier" cliqué!');
+    console.log('Vérification de lastAggregationData:', lastAggregationData);
+
+    if (lastAggregationData) {
+        try {
+             console.log('Appel de goToStep2...');
+             // Recharger le statut utilisateur AVANT d'afficher l'étape 2 pour avoir les données à jour
+             fetchUserCardsStatus().then(() => {
+                 goToStep2(lastAggregationData);
+                 console.log('goToStep2 appelé avec succès (normalement).');
+             });
+        } catch (error) {
+             console.error("Erreur pendant l'exécution de goToStep2:", error);
+             globalErrorsStep1.innerHTML = `<li>Erreur lors de l'affichage de l'étape 2: ${error.message}</li>`;
+        }
+    } else {
+        console.error("Aucune donnée d'agrégation disponible pour passer à l'étape 2.");
+        globalErrorsStep1.innerHTML = '<li>Erreur : Données d\'analyse non trouvées. Veuillez relancer l\'analyse.</li>';
+    }
+});
+
+// Ajout de variables pour suivre les modifications manuelles
+let manuallyModifiedSlots = new Map(); // Stocke les modifications par slot (row-col) et par image
+
+// Modification de la fonction populateReviewDetectedCardsGrid
+function populateReviewDetectedCardsGrid(imageIndex, resultData) {
+    console.log(`[ReviewGrid] Peuplement pour index ${imageIndex}`);
+    reviewDetectedCardsGrid.innerHTML = ''; // Vider la grille
+    loadingReviewGridMsg.style.display = 'block'; // Afficher chargement
+    noReviewGridFoundMsg.style.display = 'none'; // Cacher "pas trouvé"
+    reviewDetectedCardsContainer.style.display = 'block'; // S'assurer que le conteneur est visible
+
+    // Vérifications initiales (importantes)
+    if (!resultData || !resultData.grid_info || !resultData.detections) {
+        console.error(`[ReviewGrid] Données manquantes pour index ${imageIndex}`);
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = "Données de grille ou détections manquantes.";
+        noReviewGridFoundMsg.style.display = 'block';
+        return;
+    }
+
+    const detections = resultData.detections;
+    const gridInfo = resultData.grid_info;
+    const gridCols = gridInfo.cols_used > 0 ? gridInfo.cols_used : 5;
+    const numRows = gridInfo.rows > 0 ? gridInfo.rows : Math.ceil(detections.length / gridCols);
+    const seriesId = resultData.anchor_info?.major_series;
+
+    console.log(`[ReviewGrid] Création grille ${numRows}x${gridCols}. Série: ${seriesId || 'Non détectée'}`);
+    reviewDetectedCardsGrid.style.gridTemplateColumns = `repeat(${gridCols}, 1fr)`;
+
+    // Créer une map pour accéder rapidement aux détections par position
+    const detectionMap = new Map();
+    detections.forEach(det => {
+        if (det.row !== undefined && det.col !== undefined && det.row >= 0 && det.col >= 0) {
+            detectionMap.set(`${det.row}-${det.col}`, det);
+        }
+    });
+
+    let slotsPopulated = 0;
+    if (numRows === 0) {
+        console.log("[ReviewGrid] Aucune ligne ou détection");
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.style.display = 'block';
+        return;
+    }
+
+    for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < gridCols; c++) {
+            const slotKey = `${imageIndex}-${r}-${c}`; // Clé unique pour ce slot dans cette image
+            const det = detectionMap.get(`${r}-${c}`);
+            const slotClone = reviewGridSlotTemplate.content.cloneNode(true);
+            const slotDiv = slotClone.querySelector('.review-grid-slot');
+            const img = slotClone.querySelector('.review-card-img');
+            const placeholder = slotClone.querySelector('.review-card-placeholder');
+            const numberSpan = slotClone.querySelector('.review-card-number');
+            const manualBadge = slotClone.querySelector('.review-manual-badge');
+
+            let slotStatus = 'empty-inferred';
+            let cardKey = '';
+            let predictedNumStr = '';
+            let originalStatus = '';
+
+            if (det) {
+                originalStatus = det.status || 'unknown';
+                slotStatus = originalStatus;
+                const predictedNumber = det.predicted_number;
+                const isCard = det.is_card;
+                predictedNumStr = predictedNumber != null ? String(predictedNumber) : '?';
+                placeholder.textContent = predictedNumStr;
+
+                const isPlausibleCard = isCard && 
+                                       slotStatus.includes("Présent") && 
+                                       !slotStatus.includes("Implausible") && 
+                                       predictedNumber != null && 
+                                       seriesId;
+
+                if (isPlausibleCard) {
+                    slotStatus = 'present';
+                    cardKey = `${seriesId}-${predictedNumber}`;
+                    numberSpan.textContent = predictedNumStr;
+
+                    const cardData = allCardsData[cardKey];
+                    if (cardData && cardData.image_url) {
+                        img.onload = () => { img.style.display = 'block'; placeholder.style.display = 'none'; };
+                        img.onerror = () => { img.style.display = 'none'; placeholder.style.display = 'flex'; };
+                        img.src = cardData.image_url;
+                        img.alt = cardData.french_name || cardData.card_name || cardKey;
+                        slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte'} (${cardKey})`;
+                    } else {
+                        img.style.display = 'none';
+                        placeholder.style.display = 'flex';
+                        placeholder.textContent = predictedNumStr + ' (?)';
+                        slotDiv.title = `Carte ${cardKey} détectée mais info manquante`;
+                        slotStatus = 'present-no-data';
+                    }
+                } else if (isCard) {
+                    slotStatus = 'detected-issue';
+                    img.style.display = 'none';
+                    placeholder.style.display = 'flex';
+                    placeholder.textContent = predictedNumStr + ' !';
+                    numberSpan.textContent = predictedNumStr;
+                    slotDiv.title = `Problème détection (${det.status || '?'}) - ${predictedNumStr}`;
+                } else {
+                    slotStatus = 'empty-slot';
+                    img.style.display = 'none';
+                    placeholder.style.display = 'flex';
+                    placeholder.textContent = predictedNumStr;
+                    numberSpan.textContent = '';
+                    slotDiv.title = `Emplacement vide (attendu ${predictedNumStr})`;
+                }
+            } else {
+                slotStatus = 'empty-inferred';
+                img.style.display = 'none';
+                placeholder.style.display = 'flex';
+                placeholder.textContent = '';
+                numberSpan.textContent = '';
+                slotDiv.title = `Emplacement vide (${r},${c})`;
+            }
+
+            // Vérifier s'il y a une modification manuelle pour ce slot
+            if (manuallyModifiedSlots.has(slotKey)) {
+                const manualMod = manuallyModifiedSlots.get(slotKey);
+                slotStatus = manualMod.status;
+                
+                if (slotStatus === 'manually-present') {
+                    cardKey = manualMod.cardKey;
+                    
+                    // Si l'image n'est pas déjà chargée correctement
+                    if (img.src !== manualMod.imageUrl) {
+                        img.src = manualMod.imageUrl;
+                        img.style.display = 'block';
+                        placeholder.style.display = 'none';
+                    }
+                    
+                    slotDiv.title = manualMod.title || `Manuellement marqué comme présent`;
+                } else { // manually-absent
+                    cardKey = '';
+                    img.style.display = 'none';
+                    placeholder.style.display = 'flex';
+                    placeholder.textContent = 'X';
+                    slotDiv.title = `Manuellement marqué comme absent`;
+                }
+                
+                // Afficher le badge de modification
+                manualBadge.style.display = 'block';
+            }
+
+            // Stocker les données essentielles dans le slot
+            slotDiv.dataset.row = r;
+            slotDiv.dataset.col = c;
+            slotDiv.dataset.imageIndex = imageIndex;
+            slotDiv.dataset.cardKey = cardKey;
+            slotDiv.dataset.status = slotStatus;
+            slotDiv.dataset.originalStatus = originalStatus;
+            slotDiv.dataset.predictedNumber = predictedNumStr;
+            slotDiv.dataset.slotKey = slotKey;
+            slotDiv.dataset.seriesId = seriesId;
+
+            // Appliquer la classe CSS basée sur le statut
+            slotDiv.className = 'review-grid-slot';
+            slotDiv.classList.add(`status-${slotStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+
+            // Ajouter le gestionnaire de clic simple pour basculer l'état
+            slotDiv.addEventListener('click', handleSlotToggle);
+
+            reviewDetectedCardsGrid.appendChild(slotClone);
+            slotsPopulated++;
+        }
+    }
+
+    loadingReviewGridMsg.style.display = 'none';
+    noReviewGridFoundMsg.style.display = (slotsPopulated === 0) ? 'block' : 'none';
+    console.log(`[ReviewGrid] ${slotsPopulated} slots ajoutés à la grille.`);
+}
+
+// Fonction simplifiée pour basculer l'état d'un slot
+function handleSlotToggle(event) {
+    const slotDiv = event.currentTarget;
+    const slotKey = slotDiv.dataset.slotKey;
+    const imageIndex = parseInt(slotDiv.dataset.imageIndex, 10);
+    const seriesId = slotDiv.dataset.seriesId;
+    const predictedNumber = slotDiv.dataset.predictedNumber;
+    const currentStatus = slotDiv.dataset.status;
+    const originalStatus = slotDiv.dataset.originalStatus;
+    const isCurrentlyPresent = currentStatus === 'present' || currentStatus === 'manually-present';
+    
+    // Basculer l'état du slot
+    if (isCurrentlyPresent) {
+        // Le marquer comme absent
+        toggleSlotToAbsent(slotDiv, slotKey);
+    } else {
+        // Le marquer comme présent
+        toggleSlotToPresent(slotDiv, slotKey, seriesId, predictedNumber);
+    }
+    
+    // Mettre à jour la grille principale
+    updateSummaryCounters();
+    highlightCardsForReview(imageIndex);
+}
+
+// Fonction pour marquer un slot comme présent
+function toggleSlotToPresent(slotDiv, slotKey, seriesId, predictedNumber) {
+    if (!seriesId || !predictedNumber) {
+        return; // Ne rien faire si on n'a pas les infos nécessaires
+    }
+    
+    const cardKey = `${seriesId}-${predictedNumber}`;
+    const img = slotDiv.querySelector('.review-card-img');
+    const placeholder = slotDiv.querySelector('.review-card-placeholder');
+    const manualBadge = slotDiv.querySelector('.review-manual-badge');
+    
+    // Trouver les données de la carte
+    const cardData = allCardsData[cardKey];
+    
+    // Stocker la modification
+    manuallyModifiedSlots.set(slotKey, {
+        status: 'manually-present',
+        cardKey: cardKey,
+        imageUrl: cardData?.image_url || '',
+        title: cardData ? `${cardData.french_name || cardData.card_name || 'Carte'} (${cardKey})` : `Carte ${cardKey}`
+    });
+    
+    // Mettre à jour l'apparence
+    slotDiv.className = 'review-grid-slot status-manually-present';
+    slotDiv.dataset.status = 'manually-present';
+    slotDiv.dataset.cardKey = cardKey;
+    
+    // Mettre à jour l'image si disponible
+    if (cardData && cardData.image_url) {
+        img.src = cardData.image_url;
+        img.alt = cardData.french_name || cardData.card_name || cardKey;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+        slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte'} (${cardKey})`;
+    } else {
+        img.style.display = 'none';
+        placeholder.style.display = 'flex';
+        placeholder.textContent = predictedNumber;
+        slotDiv.title = `Carte ${cardKey} (données non disponibles)`;
+    }
+    
+    // Afficher le badge
+    manualBadge.style.display = 'block';
+    
+    // Ajouter à la liste des cartes détectées
+    updateCardDetectionStatus(cardKey, true);
+}
+
+// Fonction pour marquer un slot comme absent
+function toggleSlotToAbsent(slotDiv, slotKey) {
+    const oldCardKey = slotDiv.dataset.cardKey;
+    const img = slotDiv.querySelector('.review-card-img');
+    const placeholder = slotDiv.querySelector('.review-card-placeholder');
+    const manualBadge = slotDiv.querySelector('.review-manual-badge');
+    
+    // Stocker la modification
+    manuallyModifiedSlots.set(slotKey, {
+        status: 'manually-absent',
+        originalCardKey: oldCardKey
+    });
+    
+    // Mettre à jour l'apparence
+    slotDiv.className = 'review-grid-slot status-manually-absent';
+    slotDiv.dataset.status = 'manually-absent';
+    slotDiv.dataset.cardKey = '';
+    
+    img.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'X';
+    slotDiv.title = 'Manuellement marqué comme absent';
+    
+    // Afficher le badge
+    manualBadge.style.display = 'block';
+    
+    // Retirer de la liste des cartes détectées
+    if (oldCardKey) {
+        updateCardDetectionStatus(oldCardKey, false);
+    }
+}
+
+// Les fonctions updateCardDetectionStatus, updateSummaryCounters et updateVerificationGridFromReview restent inchangées
+// Je les conserve telles quelles car elles fonctionnent bien avec la nouvelle approche
+
+// Modification du closeReviewButton pour prendre en compte les modifications
+closeReviewButton.addEventListener('click', () => {
+    // Si des modifications ont été faites, demander confirmation
+    if (manuallyModifiedSlots.size > 0) {
+        if (confirm("Voulez-vous conserver vos modifications de détection ? Cliquez sur OK pour les conserver, ou sur Annuler pour les réinitialiser.")) {
+            // L'utilisateur veut conserver les modifications - rien à faire
+        } else {
+            // L'utilisateur veut réinitialiser - vider les modifications
+            manuallyModifiedSlots.clear();
+            // Recharger les données depuis le cache
+            updateVerificationGridFromReview();
+            updateSummaryCounters();
+        }
+    }
+    
+    reviewSection.style.display = 'none';
+    reviewDetectedCardsGrid.innerHTML = '';
+    reviewScreenshotImage.src = '';
+    currentReviewIndex = -1;
+    removeReviewHighlights();
+});
+
+// Fonction pour mettre à jour le statut de détection d'une carte
+function updateCardDetectionStatus(cardKey, isPresent) {
+    if (!cardKey) return;
+    
+    if (isPresent) {
+        // Ajouter la carte aux cartes détectées
+        currentPresentKeys.add(cardKey);
+    } else {
+        // Vérifier si cette carte n'est plus détectée dans aucun slot
+        let stillDetectedElsewhere = false;
+        
+        // Parcourir toutes les images
+        for (let imgIdx = 0; imgIdx < selectedFiles.length; imgIdx++) {
+            const cachedResult = analysisResultsCache[imgIdx];
+            if (!cachedResult || !cachedResult.success || !cachedResult.result) continue;
+            
+            const resultData = cachedResult.result;
+            if (!resultData.detections || !resultData.anchor_info?.major_series) continue;
+            
+            const seriesId = resultData.anchor_info.major_series;
+            
+            // Vérifier les détections originales et les modifications manuelles
+            resultData.detections.forEach(det => {
+                if (det.is_card && det.status?.includes("Présent") && !det.status?.includes("Implausible") && 
+                    det.predicted_number && `${seriesId}-${det.predicted_number}` === cardKey) {
+                    
+                    // Vérifier si cette détection n'a pas été manuellement marquée comme absente
+                    const slotKey = `${imgIdx}-${det.row}-${det.col}`;
+                    const manualMod = manuallyModifiedSlots.get(slotKey);
+                    
+                    if (!manualMod || manualMod.status !== 'manually-absent') {
+                        stillDetectedElsewhere = true;
+                    }
+                }
+            });
+            
+            // Vérifier les ajouts manuels dans d'autres slots
+            manuallyModifiedSlots.forEach((mod, key) => {
+                if (mod.status === 'manually-present' && mod.cardKey === cardKey && !key.startsWith(`${imgIdx}-`)) {
+                    stillDetectedElsewhere = true;
+                }
+            });
+        }
+        
+        // Si la carte n'est plus détectée ailleurs, la retirer
+        if (!stillDetectedElsewhere) {
+            currentPresentKeys.delete(cardKey);
+        }
+    }
+    
+    // Mettre à jour la grille principale
+    updateVerificationGridFromReview();
+}
+
+// Fonction pour mettre à jour les compteurs du résumé
+function updateSummaryCounters() {
+    aiPresentCount.textContent = currentPresentKeys.size;
+    
+    let alreadyOwnedCount = 0;
+    let newlyDetectedCount = 0;
+    
+    currentPresentKeys.forEach(cardKey => {
+        const ownedInfo = userCardsStatus.extra_dict[cardKey];
+        const isAlreadyOwned = !!ownedInfo && ownedInfo > 0;
+        if (isAlreadyOwned) {
+            alreadyOwnedCount++;
+        } else {
+            newlyDetectedCount++;
+        }
+    });
+    
+    document.getElementById('already-owned-count').textContent = alreadyOwnedCount;
+    document.getElementById('newly-detected-count').textContent = newlyDetectedCount;
+}
+
+// Fonction pour mettre à jour la grille principale depuis les modifications de la revue
+function updateVerificationGridFromReview() {
+    // Mettre à jour toutes les cartes de la grille principale
+    verificationGrid.querySelectorAll('.card-box').forEach(cardBox => {
+        const cardKey = cardBox.dataset.cardKey;
+        const isAiDetected = currentPresentKeys.has(cardKey);
+        const ownedInfo = userCardsStatus.extra_dict[cardKey];
+        const isAlreadyOwned = !!ownedInfo && ownedInfo > 0;
+        const isNewlyDetected = isAiDetected && !isAlreadyOwned;
+        
+        // Réinitialiser les classes pertinentes
+        cardBox.classList.remove('ai-detected', 'newly-detected');
+        
+        // Appliquer les classes en fonction du statut actuel
+        if (isAiDetected) {
+            cardBox.classList.add('ai-detected');
+            if (isNewlyDetected) {
+                cardBox.classList.add('newly-detected');
+                // Mettre à jour l'affichage si nécessaire
+                if (!cardBox.classList.contains('already-owned') && !cardBox.classList.contains('manually-added')) {
+                    const img = cardBox.querySelector('.card-img');
+                    const placeholder = cardBox.querySelector('.placeholder-number');
+                    const quantityControl = cardBox.querySelector('.quantity-control');
+                    const quantityDisplay = cardBox.querySelector('.quantity-display');
+                    
+                    // Afficher l'image et les contrôles
+                    if (img && placeholder && quantityControl && quantityDisplay) {
+                        const cardData = allCardsData[cardKey] || {};
+                        img.src = cardData.image_url || '{{ url_for("static", filename="placeholder.png") }}';
+                        img.alt = cardData.french_name || cardData.card_name || 'Carte';
+                        img.style.display = 'block';
+                        placeholder.style.display = 'none';
+                        quantityControl.style.display = 'flex';
+                        cardBox.dataset.currentQuantity = 1;
+                        quantityDisplay.textContent = 'x1';
+                    }
+                    
+                    // Retirer l'état 'missing' si présent
+                    cardBox.classList.remove('missing');
+                }
+            }
+        } else {
+            // Si la carte n'est plus détectée et qu'elle n'est pas déjà possédée ou ajoutée manuellement
+            if (!cardBox.classList.contains('already-owned') && !cardBox.classList.contains('manually-added') && 
+                !cardBox.classList.contains('marked-for-removal')) {
+                // Remettre en état "missing"
+                cardBox.classList.add('missing');
+                cardBox.classList.remove('ai-detected', 'newly-detected');
+                
+                const img = cardBox.querySelector('.card-img');
+                const placeholder = cardBox.querySelector('.placeholder-number');
+                const quantityControl = cardBox.querySelector('.quantity-control');
+                
+                if (img && placeholder && quantityControl) {
+                    img.style.display = 'none';
+                    placeholder.style.display = 'flex';
+                    placeholder.textContent = cardBox.dataset.cardNumber;
+                    quantityControl.style.display = 'none';
+                    cardBox.dataset.currentQuantity = 0;
+                }
+            }
+        }
+    });
+}
+</script>
+
+<style>
+    /* ... (Styles stepper, file-list-item identiques) ... */
+
+    /* Styles pour la grille de vérification */
+    .cards-grid {
+        display: grid;
+        /* grid-template-columns est défini inline pour grille principale, et par JS pour grille revue */
+        gap: 15px;
+    }
+    .card-box {
+        position: relative; background: white; border-radius: 12px; box-shadow: var(--card-shadow);
+        overflow: hidden; cursor: pointer; transition: all 0.2s ease; aspect-ratio: 2.5/3.5;
+        border: 2px solid #e2e8f0;
+    }
+     .card-box:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+     /* États des cartes (grille principale) */
+     .card-box.missing { border-color: #e2e8f0; background-color: #f7fafc; opacity: 0.7; }
+     .card-box.already-owned { border-color: #63b3ed; background-color: #ebf8ff; }
+     /* ai-detected: Pas de style spécifique, mais sert de marqueur */
+     /* newly-detected: Géré par l'overlay */
+     .card-box.manually-added { border-color: #48bb78; background-color: #f0fff4; }
+     .card-box.marked-for-removal { border-color: #fc8181; background-color: #fff5f5; opacity: 0.6; border-style: dashed; }
+     .card-box.has-multiple { box-shadow: inset 0 0 0 2px var(--accent-color), var(--card-shadow); }
+
+     /* Overlay jaune pour nouvelles détections */
+     .newly-detected-overlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background-color: #ecc94baa; /* Jaune avec opacité */
+        z-index: 1; pointer-events: none; opacity: 0;
+        transition: opacity 0.3s ease; border-radius: inherit;
+     }
+     .card-box.newly-detected .newly-detected-overlay { opacity: 1; }
+
+     /* Contrôle Quantité */
+     .quantity-control {
+        position: absolute; bottom: 5px; left: 5px; z-index: 6;
+        background: rgba(0, 0, 0, 0.7); border-radius: 15px;
+        padding: 3px 5px; display: none; align-items: center; gap: 5px;
+     }
+    .quantity-control button {
+        background: #4a5568; color: white; border: none; border-radius: 50%;
+        width: 20px; height: 20px; font-size: 14px; line-height: 18px;
+        cursor: pointer; padding: 0; transition: background-color 0.2s;
+    }
+     .quantity-control button:hover { background: #2d3748; }
+     .quantity-control button:disabled { background: #a0aec0; cursor: not-allowed; }
+     .quantity-display { color: white; font-size: 0.9em; font-weight: bold; min-width: 20px; text-align: center; }
+
+     /* Styles éléments internes (image, placeholder, tags) */
+    .card-image-container {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        display: flex; align-items: center; justify-content: center; z-index: 0;
+    }
+    .card-image-container img.card-img { width: 100%; height: 100%; object-fit: contain; }
+    .placeholder-number {
+        font-size: 3rem; font-weight: 700; color: #cbd5e0; display: flex;
+        align-items: center; justify-content: center; width: 100%; height: 100%;
+    }
+    .card-name-tag {
+        position: absolute; top: 0; left: 0;
+        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7) 60%, transparent);
+        color: white; width: 100%; padding: 8px 10px; font-size: 0.8rem; font-weight: 600;
+        z-index: 5; text-align: left;
+    }
+    .card-number-badge {
+        position: absolute; bottom: 8px; right: 8px; background: rgba(0, 0, 0, 0.8);
+        color: white; width: 28px; height: 28px; border-radius: 50%; display: flex;
+        align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); z-index: 5;
+    }
+
+     /* Responsivité grille principale */
+     @media (max-width: 992px) { #verification-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 768px) { #verification-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 576px) { #verification-grid { grid-template-columns: repeat(2, 1fr); } }
+
+     /* Légende */
+     .legend span { display: inline-flex; align-items: center; gap: 5px; }
+     .legend .legend-swatch {
+         width: 15px; height: 15px; border-radius: 3px; display: inline-block;
+         border: 1px solid #a0aec0;
+     }
+    .legend .missing { background-color: #f7fafc; border-color: #e2e8f0; }
+    .legend .already-owned { background-color: #ebf8ff; border-color: #63b3ed; }
+    .legend .newly-detected { background-color: #ecc94baa; border-color: #d69e2e; }
+    .legend .manually-added { background-color: #f0fff4; border-color: #48bb78; }
+    .legend .marked-for-removal { background-color: #fff5f5; border-color: #fc8181; border-style: dashed;}
+    .legend .has-multiple { background-color: #ebf8ff; border: 2px solid var(--accent-color); }
+
+     /* Séparateur Série */
+    .series-separator {
+         grid-column: 1 / -1; margin-top: 30px; margin-bottom: 15px; padding-bottom: 8px;
+         border-bottom: 2px solid var(--primary-color); font-size: 1.4em; color: var(--text-color);
+     }
+     .series-separator:first-of-type { margin-top: 10px; }
+
+    /* --- NOUVEAU : Styles pour la structure de Revue (Panneaux) --- */
+    #review-section {
+        /* display: flex; et gap: 25px; sont définis inline */
+        align-items: flex-start; /* Aligner les panneaux en haut */
+    }
+
+    #review-left-panel {
+        flex: 0 0 40%; /* Base fixe de 40% */
+        max-width: 450px; /* Limite max */
+        position: sticky;
+        top: 20px; /* Espace depuis le haut (ajuster si nécessaire) */
+        /* La hauteur est définie par le contenu (image + contrôles) */
+        padding-right: 15px; /* Espace à droite du panneau gauche */
+    }
+
+    #review-right-panel {
+        flex: 1 1 auto; /* Prend l'espace restant, flexible */
+        /* Définir une hauteur max pour que le scroll interne fonctionne et que le sticky marche */
+        /* Exemple: 80% de la hauteur visible moins un peu de marge */
+        max-height: calc(80vh - 40px);
+        overflow-y: auto; /* Activer le scroll vertical SI nécessaire */
+        padding: 5px; /* Léger padding interne */
+    }
+
+    /* S'assurer que le conteneur de la grille prend toute la largeur dispo */
+    #review-detected-cards-container {
+        width: 100%;
+        margin-bottom: 0; /* Normalement pas nécessaire ici */
+        /* display: block est géré par JS */
+    }
+
+    /* Responsive: Passer en colonne sur écrans plus petits */
+    @media (max-width: 992px) {
+        #review-section {
+            flex-direction: column;
+            align-items: stretch; /* Étendre les items sur la largeur */
+            gap: 20px; /* Ajuster l'espacement vertical */
+        }
+        #review-left-panel {
+            position: static; /* Enlever le sticky */
+            flex-basis: auto; /* Largeur auto */
+            max-width: 100%;
+            padding-right: 0; /* Pas besoin de padding à droite */
+            margin-bottom: 0; /* Géré par le gap du parent */
+        }
+        #review-right-panel {
+            max-height: none; /* Enlever la limite de hauteur */
+            overflow-y: visible; /* Pas de scroll interne nécessaire */
+        }
+    }
+    /* --- FIN Styles structure Revue --- */
+
+
+    /* Styles pour la GRILLE de revue et ses SLOTS */
+    .review-cards-grid {
+         /* display: grid et gap sont inline, grid-template-columns par JS */
+    }
+    .review-grid-slot {
+        position: relative; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 4px;
+        overflow: hidden; aspect-ratio: 2.5 / 3.5; /* Conserver ratio carte */
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+    .review-card-img {
+        width: 100%; height: 100%; object-fit: contain;
+        position: absolute; top: 0; left: 0;
+        /* display: none initialement, géré par JS/onload */
+    }
+    .review-card-placeholder {
+        font-size: 1.2em; font-weight: bold; color: #cbd5e0;
+        width: 100%; height: 100%; display: flex; /* Géré par JS/CSS de statut */
+        align-items: center; justify-content: center;
+        position: absolute; top: 0; left: 0; text-align: center; padding: 5px;
+        background-color: rgba(255,255,255, 0.5); /* Léger fond pour lisibilité */
+    }
+    .review-card-number {
+        position: absolute; bottom: 3px; right: 3px; background: rgba(0, 0, 0, 0.7);
+        color: white; font-size: 0.7em; padding: 1px 4px; border-radius: 3px; z-index: 1;
+     }
+
+     /* Styles basés sur le STATUT du slot dans la grille de revue */
+     .review-grid-slot.status-present { border-color: #68d391; /* Vert succès léger */ }
+     .review-grid-slot.status-present-no-data { border-color: #f6ad55; background-color: #fffaf0; /* Orange léger */}
+    .review-grid-slot.status-empty-slot,
+     .review-grid-slot.status-empty-inferred { background-color: #f7fafc; border-color: #e2e8f0; /* Gris clair */}
+     .review-grid-slot.status-empty-slot .review-card-placeholder,
+     .review-grid-slot.status-empty-inferred .review-card-placeholder { color: #a0aec0; font-weight: normal; font-size: 1em; }
+    .review-grid-slot.status-empty-inferred .review-card-placeholder { font-style: italic; } /* Marquer vides inférés */
+     .review-grid-slot.status-detected-issue { border-color: #fc8181; background-color: #fff5f5; /* Rouge/rose problème */ }
+     .review-grid-slot.status-detected-issue .review-card-placeholder { color: #c53030; /* Numéro en rouge foncé */}
+     .review-grid-slot.status-unknown { border-color: #cbd5e0; background-color: #edf2f7; opacity: 0.8; }
+
+     /* Highlight pour les cartes de la grille principale */
+     .card-box.highlight-review {
+        outline: 3px solid var(--accent-color); /* Ou une autre couleur vive */
+        outline-offset: 2px;
+        box-shadow: 0 0 15px rgba(255, 165, 0, 0.7); /* Lueur orange */
+     }
+
+    /* Ajout de styles pour les contrôles et les états manuels */
+    .review-slot-controls {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: none; /* Caché par défaut, visible au survol */
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 0 0 0 8px;
+        padding: 5px;
+        z-index: 10;
+    }
+    
+    .review-grid-slot:hover .review-slot-controls {
+        display: flex;
+    }
+    
+    .review-slot-controls button {
+        width: 24px;
+        height: 24px;
+        border: none;
+        border-radius: 3px;
+        margin: 0 2px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.2s;
+    }
+    
+    .review-slot-present {
+        background-color: #68d391;
+        color: white;
+    }
+    
+    .review-slot-absent {
+        background-color: #fc8181;
+        color: white;
+    }
+    
+    .review-slot-reset {
+        background-color: #cbd5e0;
+        color: #2d3748;
+    }
+    
+    /* Nouveaux états pour les slots modifiés manuellement */
+    .review-grid-slot.status-manually-present {
+        border-color: #48bb78;
+        border-width: 2px;
+        background-color: #f0fff4;
+    }
+    
+    .review-grid-slot.status-manually-absent {
+        border-color: #fc8181;
+        border-width: 2px;
+        border-style: dashed;
+        opacity: 0.7;
+        background-color: #fff5f5;
+    }
+    
+    /* Badge indiquant une correction manuelle */
+    .review-manual-badge {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 0.7em;
+        padding: 1px 4px;
+        border-radius: 3px;
+        z-index: 2;
+    }
+
+    /* Effet de survol pour indiquer que le slot est cliquable */
+    .review-grid-slot {
+        cursor: pointer;
+    }
+    
+    .review-grid-slot:hover {
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    }
+</style>
+
+{% endblock %}

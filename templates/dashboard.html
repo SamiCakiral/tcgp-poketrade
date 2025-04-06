@@ -3,1189 +3,1198 @@
 {% block content %}
 
 
-    <div class="dashboard-header">
-        <h1>Collection Pokémon</h1>
-        <div class="view-toggle">
-            <button class="active" data-view="collection">Collection</button>
-            <button data-view="wanted">Recherchées</button>
+<div class="dashboard-header">
+    <h1>Collection Pokémon</h1>
+    <div class="view-toggle">
+        <button class="active" data-view="collection">Collection</button>
+        <button data-view="wanted">Recherchées</button>
+    </div>
+</div>
+
+{% if session.get('show_trade_notification') %}
+<div class="trade-notification" id="trade-notification">
+    <div class="notification-content">
+        <div class="notification-icon">🔄</div>
+        <div class="notification-text">
+            <h3>Échanges possibles!</h3>
+            <p>Il y a {{ session.get('trade_matches_count', 0) }} carte(s) recherchée(s) disponible(s) chez d'autres
+                collectionneurs.</p>
+            <p>Ramène ta race dans la section <a href="{{ url_for('trade_assistant') }}" class="new-badge"
+                    style=" background-color: #eae73f; color: rgb(122, 122, 122);">Échanges</a> pour voir les échanges
+                possibles.</p>
+        </div>
+        <button class="close-notification" id="hide-notification">Masquer</button>
+    </div>
+</div>
+{% endif %}
+
+<div class="all-sets-container collection-view">
+    {% for set in all_sets_with_cards %}
+    <div class="set-container">
+        <div class="set-header">
+            <h2>{{ set.set_id }} - {{ set.name }}</h2>
+            <div class="set-stats">
+                {% set owned_count = 0 %}
+                {% for card in set.cards %}
+                {% set card_key = card.set_id ~ '-' ~ card.card_number %}
+                {% if card_key in extra_dict %}
+                {% set owned_count = owned_count + 1 %}
+                {% endif %}
+                {% endfor %}
+                <span class="card-count">{{ owned_count }} / {{ set.cards|length }}</span>
+            </div>
+        </div>
+
+        <div class="cards-grid">
+            {% for card in set.cards %}
+            {% set card_key = card.set_id ~ '-' ~ card.card_number %}
+            {% set is_owned = card_key in extra_dict %}
+            {% set is_wanted = card_key in wanted_dict %}
+            {% set is_available = card_key in available_dict %}
+
+            <div class="card-box {% if is_owned %}owned{% elif is_wanted %}wanted{% if is_available %} available{% endif %}{% else %}missing{% endif %}"
+                data-card-id="{{ card.id }}" data-set-id="{{ card.set_id }}" data-card-number="{{ card.card_number }}"
+                data-rarity="{{ card.rarity }}" data-card-name="{{ card.french_name or card.card_name }}" {% if
+                is_available %}data-owners="{{ available_dict[card_key] }}" {% endif %}>
+                <div class="card-image-container">
+                    {% if is_owned and card.image_url %}
+                    <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
+                    {% else %}
+                    <div class="placeholder-number">{{ card.card_number }}</div>
+                    {% endif %}
+                </div>
+                <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
+                <div class="card-number-badge">{{ card.card_number }}</div>
+
+                {% if is_owned and extra_dict[card_key] > 1 %}
+                <div class="card-quantity">×{{ extra_dict[card_key] }}</div>
+                {% endif %}
+
+                {% if is_wanted %}
+                <div class="card-wanted-badge">
+                    <i class="fas fa-search"></i>
+                </div>
+
+                {% if is_available %}
+                <div class="available-badge">Disponible</div>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endfor %}
         </div>
     </div>
+    {% endfor %}
+</div>
 
-    {% if session.get('show_trade_notification') %}
-    <div class="trade-notification" id="trade-notification">
-        <div class="notification-content">
-            <div class="notification-icon">🔄</div>
-            <div class="notification-text">
-                <h3>Échanges possibles!</h3>
-                <p>Il y a {{ session.get('trade_matches_count', 0) }} carte(s) recherchée(s) disponible(s) chez d'autres collectionneurs.</p>
-                <p>Ramène ta race dans la section <a href="{{ url_for('trade_assistant') }}" class="new-badge" style=" background-color: #eae73f; color: rgb(122, 122, 122);">Échanges</a> pour voir les échanges possibles.</p>
+<div class="sort-floating-button">
+    <button class="sort-btn" id="open-sort-menu">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="9" x2="20" y2="9"></line>
+            <line x1="4" y1="15" x2="20" y2="15"></line>
+            <line x1="10" y1="3" x2="8" y2="21"></line>
+            <line x1="18" y1="4" x2="14" y2="20"></line>
+        </svg>
+    </button>
+</div>
+
+<div class="sort-menu" id="sort-menu">
+    <div class="sort-header">
+        <h3>Trier les cartes</h3>
+        <button class="close-sort-menu">&times;</button>
+    </div>
+    <div class="sort-options">
+        <div class="sort-group">
+            <div class="sort-group-title">Par collection</div>
+            <div class="sort-buttons">
+                <button class="sort-option" data-sort="collection" data-order="asc">A → Z</button>
+                <button class="sort-option" data-sort="collection" data-order="desc">Z → A</button>
             </div>
-            <button class="close-notification" id="hide-notification">Masquer</button>
         </div>
+
+        <div class="sort-group">
+            <div class="sort-group-title">Par rareté</div>
+            <div class="sort-buttons">
+                <button class="sort-option" data-sort="rarity" data-order="asc">Commune → Rare</button>
+                <button class="sort-option" data-sort="rarity" data-order="desc">Rare → Commune</button>
+            </div>
+        </div>
+
+        <div class="sort-group">
+            <div class="sort-group-title">Par nom de carte</div>
+            <div class="sort-buttons">
+                <button class="sort-option" data-sort="name" data-order="asc">A → Z</button>
+                <button class="sort-option" data-sort="name" data-order="desc">Z → A</button>
+            </div>
+        </div>
+
+        <div class="sort-group">
+            <div class="sort-group-title">Par numéro</div>
+            <div class="sort-buttons">
+                <button class="sort-option" data-sort="number" data-order="asc">Croissant</button>
+                <button class="sort-option" data-sort="number" data-order="desc">Décroissant</button>
+            </div>
+        </div>
+
+        <div class="sort-group">
+            <div class="sort-group-title">Par cartes manquantes</div>
+            <div class="sort-buttons">
+                <button class="sort-option" data-sort="missing" data-group="false">Sans regroupement</button>
+                <button class="sort-option" data-sort="missing" data-group="true">Par collection</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="floating-action-button">
+    <a href="{{ url_for('add_card') }}" class="fab-button">+</a>
+</div>
+
+
+
+<div class="modal" id="card-modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <div class="card-details">
+            <div class="card-image-large">
+                <img id="modal-card-image" src="" alt="Carte Pokémon">
+            </div>
+            <div class="card-info">
+                <h3 id="modal-card-name"></h3>
+                <p id="modal-card-original-name" class="card-original-name"></p>
+                <p>Numéro: <span id="modal-card-number"></span></p>
+                <p>Série: <span id="modal-card-set"></span></p>
+                <div id="modal-card-quantity-container">
+                    <p>Quantité: <span id="modal-card-quantity"></span></p>
+                </div>
+                <div class="card-actions" id="card-actions-container">
+                    <div id="not-in-collection-actions">
+                        <button id="add-to-collection" class="button">Ajouter à ma collection</button>
+                        <button id="add-to-wanted" class="button secondary-button">Ajouter aux recherches</button>
+                    </div>
+                    <div id="in-collection-actions" style="display:none;">
+                        <button id="increment-quantity" class="button">+1 Quantité</button>
+                        <button id="remove-card" class="button danger-button">Supprimer</button>
+                    </div>
+                    <div id="wanted-card-actions" style="display:none;">
+                        <button id="convert-to-collection" class="button success-button">Obtenue! Ajouter à ma
+                            collection</button>
+                        <button id="remove-from-wanted" class="button danger-button">Retirer des recherches</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<div class="all-wanted-cards wanted-view" style="display: none;">
+    {% if has_wanted_cards %}
+    {% for set in all_sets_with_cards %}
+    <div class="set-container">
+        <div class="set-header">
+            <h2>{{ set.set_id }} - {{ set.name }}</h2>
+        </div>
+        <div class="cards-grid">
+            {% for card in set.cards %}
+            {% set card_key = card.set_id ~ '-' ~ card.card_number %}
+
+            {% set is_wanted = card_key in wanted_dict %}
+            {% set is_available = card_key in available_dict %}
+
+            {% if not is_owned and is_wanted %}
+            <div class="card-box {% if is_wanted %}wanted{% endif %}" data-card-id="{{ card.id }}"
+                data-set-id="{{ card.set_id }}" data-card-number="{{ card.card_number }}"
+                data-rarity="{{ card.rarity }}" data-card-name="{{ card.french_name or card.card_name }}" {% if
+                is_available %}data-owners="{{ available_dict[card_key] }}" {% endif %}>
+                <div class="card-image-container">
+                    <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
+                </div>
+                <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
+                <div class="card-number-badge">{{ card.card_number }}</div>
+
+                {% if is_wanted %}
+                <div class="card-wanted-badge">
+                    <i class="fas fa-search"></i>
+                </div>
+
+                {% if is_available %}
+                <div class="available-badge">Disponible</div>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="no-cards-message">
+        <div class="message-icon">🔍</div>
+        <h3>Vous n'avez pas encore choisi de cartes à rechercher!</h3>
+        <p>Ajoutez des cartes que vous souhaitez obtenir pour les voir apparaître ici.</p>
+        <a href="{{ url_for('add_card') }}" class="button">Ajouter des cartes à rechercher</a>
     </div>
     {% endif %}
-
-    <div class="all-sets-container collection-view">
-        {% for set in all_sets_with_cards %}
-            <div class="set-container">
-                <div class="set-header">
-                    <h2>{{ set.set_id }} - {{ set.name }}</h2>
-                    <div class="set-stats">
-                        {% set owned_count = 0 %}
-                        {% for card in set.cards %}
-                            {% set card_key = card.set_id ~ '-' ~ card.card_number %}
-                            {% if card_key in extra_dict %}
-                                {% set owned_count = owned_count + 1 %}
-                            {% endif %}
-                        {% endfor %}
-                        <span class="card-count">{{ owned_count }} / {{ set.cards|length }}</span>
-                    </div>
-                </div>
-                
-                <div class="cards-grid">
-                    {% for card in set.cards %}
-                        {% set card_key = card.set_id ~ '-' ~ card.card_number %}
-                        {% set is_owned = card_key in extra_dict %}
-                        {% set is_wanted = card_key in wanted_dict %}
-                        {% set is_available = card_key in available_dict %}
-                        
-                        <div class="card-box {% if is_owned %}owned{% elif is_wanted %}wanted{% if is_available %} available{% endif %}{% else %}missing{% endif %}" 
-                             data-card-id="{{ card.id }}" 
-                             data-set-id="{{ card.set_id }}" 
-                             data-card-number="{{ card.card_number }}"
-                             data-rarity="{{ card.rarity }}"
-                             data-card-name="{{ card.french_name or card.card_name }}"
-                             {% if is_available %}data-owners="{{ available_dict[card_key] }}"{% endif %}>
-                            <div class="card-image-container">
-                                {% if is_owned and card.image_url %}
-                                    <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
-                                {% else %}
-                                    <div class="placeholder-number">{{ card.card_number }}</div>
-                                {% endif %}
-                            </div>
-                            <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
-                            <div class="card-number-badge">{{ card.card_number }}</div>
-                            
-                            {% if is_owned and extra_dict[card_key] > 1 %}
-                                <div class="card-quantity">×{{ extra_dict[card_key] }}</div>
-                            {% endif %}
-                            
-                            {% if is_wanted %}
-                                <div class="card-wanted-badge">
-                                    <i class="fas fa-search"></i>
-                                </div>
-                                
-                                {% if is_available %}
-                                    <div class="available-badge">Disponible</div>
-                                {% endif %}
-                            {% endif %}
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-        {% endfor %}
+</div>
+<div class="account-actions">
+    <h3>Actions du compte</h3>
+    <div class="action-buttons">
+        <a href="{{ url_for('logout') }}" class="button secondary-button">Se déconnecter</a>
+        <a href="#" id="delete-account-btn" class="button danger-button">Supprimer mon compte</a>
     </div>
-
-    <div class="sort-floating-button">
-        <button class="sort-btn" id="open-sort-menu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="4" y1="9" x2="20" y2="9"></line>
-                <line x1="4" y1="15" x2="20" y2="15"></line>
-                <line x1="10" y1="3" x2="8" y2="21"></line>
-                <line x1="18" y1="4" x2="14" y2="20"></line>
-            </svg>
-        </button>
-    </div>
-
-    <div class="sort-menu" id="sort-menu">
-        <div class="sort-header">
-            <h3>Trier les cartes</h3>
-            <button class="close-sort-menu">&times;</button>
-        </div>
-        <div class="sort-options">
-            <div class="sort-group">
-                <div class="sort-group-title">Par collection</div>
-                <div class="sort-buttons">
-                    <button class="sort-option" data-sort="collection" data-order="asc">A → Z</button>
-                    <button class="sort-option" data-sort="collection" data-order="desc">Z → A</button>
-                </div>
-            </div>
-            
-            <div class="sort-group">
-                <div class="sort-group-title">Par rareté</div>
-                <div class="sort-buttons">
-                    <button class="sort-option" data-sort="rarity" data-order="asc">Commune → Rare</button>
-                    <button class="sort-option" data-sort="rarity" data-order="desc">Rare → Commune</button>
-                </div>
-            </div>
-            
-            <div class="sort-group">
-                <div class="sort-group-title">Par nom de carte</div>
-                <div class="sort-buttons">
-                    <button class="sort-option" data-sort="name" data-order="asc">A → Z</button>
-                    <button class="sort-option" data-sort="name" data-order="desc">Z → A</button>
-                </div>
-            </div>
-            
-            <div class="sort-group">
-                <div class="sort-group-title">Par numéro</div>
-                <div class="sort-buttons">
-                    <button class="sort-option" data-sort="number" data-order="asc">Croissant</button>
-                    <button class="sort-option" data-sort="number" data-order="desc">Décroissant</button>
-                </div>
-            </div>
-            
-            <div class="sort-group">
-                <div class="sort-group-title">Par cartes manquantes</div>
-                <div class="sort-buttons">
-                    <button class="sort-option" data-sort="missing" data-group="false">Sans regroupement</button>
-                    <button class="sort-option" data-sort="missing" data-group="true">Par collection</button>
-                </div>
-            </div>
+</div>
+<div class="modal" id="delete-account-modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <h3>Supprimer votre compte?</h3>
+        <p>Cette action est irréversible. Toutes vos cartes et préférences seront supprimées.</p>
+        <div class="modal-actions">
+            <button id="confirm-delete" class="button danger-button">Confirmer la suppression</button>
+            <button id="cancel-delete" class="button secondary-button">Annuler</button>
         </div>
     </div>
+</div>
+<style>
+    .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
 
-    <div class="floating-action-button">
-        <a href="{{ url_for('add_card') }}" class="fab-button">+</a>
-    </div>
+    .view-toggle {
+        display: flex;
+        background: white;
+        border-radius: 8px;
+        box-shadow: var(--card-shadow);
+        overflow: hidden;
+    }
 
+    .set-selector {
+        margin-bottom: 20px;
+    }
 
+    .set-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+    }
 
-    <div class="modal" id="card-modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <div class="card-details">
-                <div class="card-image-large">
-                    <img id="modal-card-image" src="" alt="Carte Pokémon">
-                </div>
-                <div class="card-info">
-                    <h3 id="modal-card-name"></h3>
-                    <p id="modal-card-original-name" class="card-original-name"></p>
-                    <p>Numéro: <span id="modal-card-number"></span></p>
-                    <p>Série: <span id="modal-card-set"></span></p>
-                    <div id="modal-card-quantity-container">
-                        <p>Quantité: <span id="modal-card-quantity"></span></p>
-                    </div>
-                    <div class="card-actions" id="card-actions-container">
-                        <div id="not-in-collection-actions">
-                            <button id="add-to-collection" class="button">Ajouter à ma collection</button>
-                            <button id="add-to-wanted" class="button secondary-button">Ajouter aux recherches</button>
-                        </div>
-                        <div id="in-collection-actions" style="display:none;">
-                            <button id="increment-quantity" class="button">+1 Quantité</button>
-                            <button id="remove-card" class="button danger-button">Supprimer</button>
-                        </div>
-                        <div id="wanted-card-actions" style="display:none;">
-                            <button id="convert-to-collection" class="button success-button">Obtenue! Ajouter à ma collection</button>
-                            <button id="remove-from-wanted" class="button danger-button">Retirer des recherches</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    .set-button {
+        background: #f1f5f9;
+        color: var(--dark-color);
+        border: none;
+        padding: 8px 15px;
+        border-radius: 6px;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 500;
+        cursor: pointer;
+        transition: var(--transition);
+        text-decoration: none;
+        display: inline-block;
+    }
 
-    
+    .set-button.active {
+        background: var(--primary-color);
+        color: white;
+    }
 
-    <div class="all-wanted-cards wanted-view" style="display: none;">
-        {% if has_wanted_cards %}
-            {% for set in all_sets_with_cards %}
-                <div class="set-container">
-                    <div class="set-header">
-                        <h2>{{ set.set_id }} - {{ set.name }}</h2>
-                    </div>
-                    <div class="cards-grid">
-                        {% for card in set.cards %}
-                            {% set card_key = card.set_id ~ '-' ~ card.card_number %}
-                            
-                            {% set is_wanted = card_key in wanted_dict %}
-                            {% set is_available = card_key in available_dict %}
-                            
-                            {% if not is_owned and is_wanted %}
-                                <div class="card-box {% if is_wanted %}wanted{% endif %}"
-                                    data-card-id="{{ card.id }}"
-                                    data-set-id="{{ card.set_id }}"
-                                    data-card-number="{{ card.card_number }}"
-                                    data-rarity="{{ card.rarity }}"
-                                    data-card-name="{{ card.french_name or card.card_name }}"
-                                    {% if is_available %}data-owners="{{ available_dict[card_key] }}"{% endif %}>
-                                    <div class="card-image-container" >
-                                        <img src="{{ card.image_url }}" alt="{{ card.french_name or card.card_name }}">
-                                    </div>
-                                    <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
-                                    <div class="card-number-badge">{{ card.card_number }}</div>
-                                    
-                                    {% if is_wanted %}
-                                        <div class="card-wanted-badge">
-                                            <i class="fas fa-search"></i>
-                                        </div>
-                                        
-                                        {% if is_available %}
-                                            <div class="available-badge">Disponible</div>
-                                        {% endif %}
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-        {% else %}
-            <div class="no-cards-message">
-                <div class="message-icon">🔍</div>
-                <h3>Vous n'avez pas encore choisi de cartes à rechercher!</h3>
-                <p>Ajoutez des cartes que vous souhaitez obtenir pour les voir apparaître ici.</p>
-                <a href="{{ url_for('add_card') }}" class="button">Ajouter des cartes à rechercher</a>
-            </div>
-        {% endif %}
-    </div>
-    <div class="account-actions">
-        <h3>Actions du compte</h3>
-        <div class="action-buttons">
-            <a href="{{ url_for('logout') }}" class="button secondary-button">Se déconnecter</a>
-            <a href="#" id="delete-account-btn" class="button danger-button">Supprimer mon compte</a>
-        </div>
-    </div>
-    <div class="modal" id="delete-account-modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h3>Supprimer votre compte?</h3>
-            <p>Cette action est irréversible. Toutes vos cartes et préférences seront supprimées.</p>
-            <div class="modal-actions">
-                <button id="confirm-delete" class="button danger-button">Confirmer la suppression</button>
-                <button id="cancel-delete" class="button secondary-button">Annuler</button>
-            </div>
-        </div>
-    </div>
-    <style>
-        .dashboard-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .view-toggle {
-            display: flex;
-            background: white;
-            border-radius: 8px;
-            box-shadow: var(--card-shadow);
-            overflow: hidden;
-        }
-        
-        .set-selector {
-            margin-bottom: 20px;
-        }
-        
-        .set-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        
-        .set-button {
-            background: #f1f5f9;
-            color: var(--dark-color);
-            border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
-            font-family: 'Poppins', sans-serif;
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        .set-button.active {
-            background: var(--primary-color);
-            color: white;
-        }
-        
-        .set-info {
-            background: white;
-            border-radius: 12px;
-            box-shadow: var(--card-shadow);
-            padding: 15px 20px;
-            margin-bottom: 20px;
-        }
-        
-        .set-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            user-select: none;
-            padding-bottom: 10px;
-        }
-        
-        .set-header h2 {
-            display: flex;
-            align-items: center;
-        }
-        
-        .set-header h2::before {
-            content: "▼";
-            font-size: 0.8rem;
-            margin-right: 10px;
-            transition: transform 0.3s ease;
-        }
-        
-        .set-container.collapsed .set-header h2::before {
-            transform: rotate(-90deg);
-        }
-        
-        .set-container.collapsed .cards-grid {
-            display: none;
-        }
-        
+    .set-info {
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--card-shadow);
+        padding: 15px 20px;
+        margin-bottom: 20px;
+    }
+
+    .set-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+        padding-bottom: 10px;
+    }
+
+    .set-header h2 {
+        display: flex;
+        align-items: center;
+    }
+
+    .set-header h2::before {
+        content: "▼";
+        font-size: 0.8rem;
+        margin-right: 10px;
+        transition: transform 0.3s ease;
+    }
+
+    .set-container.collapsed .set-header h2::before {
+        transform: rotate(-90deg);
+    }
+
+    .set-container.collapsed .cards-grid {
+        display: none;
+    }
+
+    .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .card-box {
+        position: relative;
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--card-shadow);
+        overflow: hidden;
+        cursor: pointer;
+        transition: var(--transition);
+        aspect-ratio: 2.5/3.5;
+    }
+
+    .card-box.owned {
+        border: 2px solid #48bb78;
+    }
+
+    .card-box.wanted {
+        border: 2px solid #3182ce;
+    }
+
+    .card-box.available {
+        border: 2px solid var(--accent-color);
+        background: linear-gradient(to bottom, rgba(255, 209, 102, 0.05), rgba(255, 209, 102, 0.15));
+    }
+
+    .card-box.missing {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    .card-box:hover {
+        transform: translateY(-5px) scale(1.02);
+        box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.15);
+    }
+
+    .card-image-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .card-image-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    .placeholder-number {
+        font-size: 3rem;
+        font-weight: 700;
+        color: #cbd5e0;
+    }
+
+    .card-info-overlay {
+        display: none;
+    }
+
+    .card-number-badge {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 600;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        z-index: 5;
+    }
+
+    .card-name-tag {
+        position: absolute;
+        top: 0;
+        left: 0;
+        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7) 60%, transparent);
+        color: white;
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        z-index: 5;
+        text-align: left;
+    }
+
+    .card-quantity {
+        top: 8px;
+        right: 8px;
+        z-index: 6;
+    }
+
+    .card-box.owned .card-name-tag {
+        background: linear-gradient(to bottom, rgba(38, 120, 76, 0.9), rgba(38, 120, 76, 0.7) 60%, transparent);
+    }
+
+    .card-box.wanted .card-name-tag {
+        background: linear-gradient(to bottom, rgba(49, 100, 189, 0.9), rgba(49, 100, 189, 0.7) 60%, transparent);
+    }
+
+    .card-box.missing .card-name-tag {
+        background: linear-gradient(to bottom, rgba(80, 90, 110, 0.9), rgba(80, 90, 110, 0.7) 60%, transparent);
+    }
+
+    .available-badge {
+        position: absolute;
+        bottom: 8px;
+        background: var(--accent-color);
+        color: white;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        z-index: 5;
+    }
+
+    .card-wanted-badge {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        color: white;
+        z-index: 5;
+    }
+
+    .empty-collection {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 50px 0;
+    }
+
+    .floating-action-button {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        z-index: 100;
+    }
+
+    .fab-button {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 60px;
+        height: 60px;
+        background: var(--primary-color);
+        color: white;
+        border-radius: 50%;
+        font-size: 30px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        text-decoration: none;
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .fab-button:hover {
+        transform: scale(1.1);
+        background: #4958b5;
+    }
+
+    /* Modal styles */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        overflow: auto;
+    }
+
+    .modal-content {
+        background: white;
+        margin: 5% auto;
+        width: 80%;
+        max-width: 900px;
+        border-radius: 12px;
+        box-shadow: var(--card-shadow);
+        position: relative;
+        padding: 30px;
+    }
+
+    .close-modal {
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        font-size: 30px;
+        cursor: pointer;
+        color: #aaa;
+    }
+
+    .close-modal:hover {
+        color: var(--dark-color);
+    }
+
+    .card-details {
+        display: flex;
+        gap: 30px;
+    }
+
+    .card-image-large {
+        flex: 0 0 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .card-image-large img {
+        max-width: 100%;
+        max-height: 500px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-info {
+        flex: 1;
+    }
+
+    .card-info h3 {
+        font-size: 1.8rem;
+        margin-bottom: 10px;
+    }
+
+    .card-actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 15px;
+    }
+
+    .no-image {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #f0f2f5;
+        color: #718096;
+        font-size: 0.8rem;
+        text-align: center;
+    }
+
+    @media (max-width: 992px) {
         .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .cards-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
             gap: 15px;
-            margin-top: 20px;
         }
-        
-        .card-box {
-            position: relative;
-            background: white;
-            border-radius: 12px;
-            box-shadow: var(--card-shadow);
-            overflow: hidden;
-            cursor: pointer;
-            transition: var(--transition);
-            aspect-ratio: 2.5/3.5;
-        }
-        
-        .card-box.owned {
-            border: 2px solid #48bb78;
-        }
-        
-        .card-box.wanted {
-            border: 2px solid #3182ce;
-        }
-        
-        .card-box.available {
-            border: 2px solid var(--accent-color);
-            background: linear-gradient(to bottom, rgba(255, 209, 102, 0.05), rgba(255, 209, 102, 0.15));
-        }
-        
-        .card-box.missing {
-            background: #f1f5f9;
-            color: #64748b;
-        }
-        
-        .card-box:hover {
-            transform: translateY(-5px) scale(1.02);
-            box-shadow: 0 15px 25px -5px rgba(0,0,0,0.15);
-        }
-        
-        .card-image-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .card-image-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-        
-        .placeholder-number {
-            font-size: 3rem;
-            font-weight: 700;
-            color: #cbd5e0;
-        }
-        
-        .card-info-overlay {
-            display: none;
-        }
-        
-        .card-number-badge {
-            position: absolute;
-            bottom: 8px;
-            right: 8px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
-            font-weight: 600;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            z-index: 5;
-        }
-        
-        .card-name-tag {
-            position: absolute;
-            top: 0;
-            left: 0;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.7) 60%, transparent);
-            color: white;
-            width: 100%;
-            padding: 8px 10px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            z-index: 5;
-            text-align: left;
-        }
-        
-        .card-quantity {
-            top: 8px;
-            right: 8px;
-            z-index: 6;
-        }
-        
-        .card-box.owned .card-name-tag {
-            background: linear-gradient(to bottom, rgba(38, 120, 76, 0.9), rgba(38, 120, 76, 0.7) 60%, transparent);
-        }
-        
-        .card-box.wanted .card-name-tag {
-            background: linear-gradient(to bottom, rgba(49, 100, 189, 0.9), rgba(49, 100, 189, 0.7) 60%, transparent);
-        }
-        
-        .card-box.missing .card-name-tag {
-            background: linear-gradient(to bottom, rgba(80, 90, 110, 0.9), rgba(80, 90, 110, 0.7) 60%, transparent);
-        }
-        
-        .available-badge {
-            position: absolute;
-            bottom: 8px;
-            right: 8px;
-            background: var(--accent-color);
-            color: white;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            z-index: 5;
-        }
-        
-        .card-wanted-badge {
-            position: absolute;
-            bottom: 8px;
-            left: 8px;
-            color: white;
-            z-index: 5;
-        }
-        
-        .empty-collection {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 50px 0;
-        }
-        
-        .floating-action-button {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 100;
-        }
-        
-        .fab-button {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 60px;
-            height: 60px;
-            background: var(--primary-color);
-            color: white;
-            border-radius: 50%;
-            font-size: 30px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            text-decoration: none;
-            transition: transform 0.2s ease, background 0.2s ease;
-        }
-        
-        .fab-button:hover {
-            transform: scale(1.1);
-            background: #4958b5;
-        }
-        
-        /* Modal styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            overflow: auto;
-        }
-        
-        .modal-content {
-            background: white;
-            margin: 5% auto;
-            width: 80%;
-            max-width: 900px;
-            border-radius: 12px;
-            box-shadow: var(--card-shadow);
-            position: relative;
-            padding: 30px;
-        }
-        
-        .close-modal {
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            font-size: 30px;
-            cursor: pointer;
-            color: #aaa;
-        }
-        
-        .close-modal:hover {
-            color: var(--dark-color);
-        }
-        
+
         .card-details {
-            display: flex;
-            gap: 30px;
+            flex-direction: column;
         }
-        
+
         .card-image-large {
-            flex: 0 0 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .card-image-large img {
-            max-width: 100%;
-            max-height: 500px;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        
-        .card-info {
-            flex: 1;
-        }
-        
-        .card-info h3 {
-            font-size: 1.8rem;
-            margin-bottom: 10px;
-        }
-        
-        .card-actions {
-            margin-top: 30px;
-            display: flex;
-            gap: 15px;
-        }
-        
-        .no-image {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: #f0f2f5;
-            color: #718096;
-            font-size: 0.8rem;
-            text-align: center;
-        }
-        
-        @media (max-width: 992px) {
-            .cards-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .cards-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-            
-            .dashboard-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-            
-            .card-details {
-                flex-direction: column;
-            }
-            
-            .card-image-large {
-                margin-bottom: 20px;
-            }
-            
-            .modal-content {
-                width: 95%;
-                padding: 20px;
-            }
-        }
-        
-        @media (max-width: 576px) {
-            .cards-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+            margin-bottom: 20px;
         }
 
-        .trade-notification {
-            background: linear-gradient(to right, var(--primary-color), #6c80e0);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 25px;
-            color: white;
-            box-shadow: var(--card-shadow);
-            animation: fadeIn 0.5s ease;
-        }
-        
-        .notification-content {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .notification-icon {
-            font-size: 2rem;
-            background: rgba(255, 255, 255, 0.2);
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-        }
-        
-        .notification-text {
-            flex: 1;
-        }
-        
-        .notification-text h3 {
-            color: white;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-        
-        .notification-text p {
-            margin: 0;
-            opacity: 0.9;
-        }
-        
-        .close-notification {
-            background: rgba(0, 0, 0, 0.1);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-        
-        .close-notification:hover {
-            background: rgba(0, 0, 0, 0.2);
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Style pour les cartes recherchées disponibles */
-        .card-box.wanted.available {
-            border-color: var(--accent-color);
-            background: linear-gradient(to bottom, rgba(255, 209, 102, 0.05), rgba(255, 209, 102, 0.15));
-        }
-        
-        .card-box.wanted.available::after {
-            content: '✓';
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 24px;
-            height: 24px;
-            background: var(--accent-color);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 0.8rem;
-        }
-        
-        .available-badge {
-            position: absolute;
-            left: 10px;
-            background: var(--accent-color);
-            color: white;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            z-index: 5;
-        }
-
-        /* Style pour la vue des cartes recherchées */
-        .all-wanted-cards {
-            margin-top: 25px;
-        }
-        
-        .set-container {
-            margin-bottom: 30px;
-        }
-        
-        .no-cards-message {
-            text-align: center;
-            background: white;
-            border-radius: 12px;
-            padding: 40px 20px;
-            margin: 30px 0;
-            box-shadow: var(--card-shadow);
-        }
-        
-        .message-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            color: var(--primary-color);
-        }
-        
-        .no-cards-message h3 {
-            margin-bottom: 10px;
-            color: var(--dark-color);
-        }
-        
-        .no-cards-message p {
-            color: #64748b;
-            margin-bottom: 25px;
-        }
-        
-        .no-cards-message .button {
-            display: inline-block;
-            background: var(--primary-color);
-            color: white;
-            padding: 12px 25px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: var(--transition);
-        }
-        
-        .no-cards-message .button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px -5px rgba(93, 111, 211, 0.4);
-        }
-
-        /* Styles pour l'affichage des séries */
-        .all-sets-container {
-            margin-top: 25px;
-        }
-        
-        .set-container {
-            margin-bottom: 40px;
-            background: white;
-            border-radius: 12px;
+        .modal-content {
+            width: 95%;
             padding: 20px;
-            box-shadow: var(--card-shadow);
         }
-        
-        .set-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #e2e8f0;
+    }
+
+    @media (max-width: 576px) {
+        .cards-grid {
+            grid-template-columns: repeat(2, 1fr);
         }
-        
-        .set-stats {
-            background: var(--primary-color);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9rem;
+    }
+
+    .trade-notification {
+        background: linear-gradient(to right, var(--primary-color), #6c80e0);
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 25px;
+        color: white;
+        box-shadow: var(--card-shadow);
+        animation: fadeIn 0.5s ease;
+    }
+
+    .notification-content {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .notification-icon {
+        font-size: 2rem;
+        background: rgba(255, 255, 255, 0.2);
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+
+    .notification-text {
+        flex: 1;
+    }
+
+    .notification-text h3 {
+        color: white;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+
+    .notification-text p {
+        margin: 0;
+        opacity: 0.9;
+    }
+
+    .close-notification {
+        background: rgba(0, 0, 0, 0.1);
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .close-notification:hover {
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
         }
 
-        .success-button {
-            background-color: #48bb78;
-            color: white;
+        to {
+            opacity: 1;
+            transform: translateY(0);
         }
+    }
 
-        .success-button:hover {
-            background-color: #38a169;
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(56, 161, 105, 0.3);
-        }
+    /* Style pour les cartes recherchées disponibles */
+    .card-box.wanted.available {
+        border-color: var(--accent-color);
+        background: linear-gradient(to bottom, rgba(255, 209, 102, 0.05), rgba(255, 209, 102, 0.15));
+    }
 
-        .card-owners {
-            margin-top: 15px;
-            background: #f8f9fa;
-            padding: 12px;
-            border-radius: 8px;
-        }
+    .card-box.wanted.available::after {
+        content: '✓';
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 24px;
+        height: 24px;
+        background: var(--accent-color);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 0.8rem;
+    }
 
-        .card-owners h4 {
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: var(--primary-color);
-        }
+    .available-badge {
+        position: absolute;
+        left: 10px;
+        background: var(--accent-color);
+        color: white;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        z-index: 5;
+    }
 
-        .owners-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
+    /* Style pour la vue des cartes recherchées */
+    .all-wanted-cards {
+        margin-top: 25px;
+    }
 
-        .owners-list li {
-            padding: 5px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
+    .set-container {
+        margin-bottom: 30px;
+    }
 
-        .owners-list li:last-child {
-            border-bottom: none;
-        }
+    .no-cards-message {
+        text-align: center;
+        background: white;
+        border-radius: 12px;
+        padding: 40px 20px;
+        margin: 30px 0;
+        box-shadow: var(--card-shadow);
+    }
 
-        /* Bouton de tri flottant */
+    .message-icon {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: var(--primary-color);
+    }
+
+    .no-cards-message h3 {
+        margin-bottom: 10px;
+        color: var(--dark-color);
+    }
+
+    .no-cards-message p {
+        color: #64748b;
+        margin-bottom: 25px;
+    }
+
+    .no-cards-message .button {
+        display: inline-block;
+        background: var(--primary-color);
+        color: white;
+        padding: 12px 25px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: var(--transition);
+    }
+
+    .no-cards-message .button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px -5px rgba(93, 111, 211, 0.4);
+    }
+
+    /* Styles pour l'affichage des séries */
+    .all-sets-container {
+        margin-top: 25px;
+    }
+
+    .set-container {
+        margin-bottom: 40px;
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: var(--card-shadow);
+    }
+
+    .set-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .set-stats {
+        background: var(--primary-color);
+        color: white;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .success-button {
+        background-color: #48bb78;
+        color: white;
+    }
+
+    .success-button:hover {
+        background-color: #38a169;
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(56, 161, 105, 0.3);
+    }
+
+    .card-owners {
+        margin-top: 15px;
+        background: #f8f9fa;
+        padding: 12px;
+        border-radius: 8px;
+    }
+
+    .card-owners h4 {
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: var(--primary-color);
+    }
+
+    .owners-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .owners-list li {
+        padding: 5px 0;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .owners-list li:last-child {
+        border-bottom: none;
+    }
+
+    /* Bouton de tri flottant */
+    .sort-floating-button {
+        position: fixed;
+        bottom: 30px;
+        right: 100px;
+        /* Décalé par rapport au FAB existant */
+        z-index: 100;
+    }
+
+    .sort-btn {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 50px;
+        height: 50px;
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        font-size: 24px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .sort-btn:hover {
+        transform: scale(1.1);
+        background: #4958b5;
+    }
+
+    /* Menu de tri */
+    .sort-menu {
+        display: none;
+        position: fixed;
+        bottom: 90px;
+        right: 30px;
+        width: 300px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
+        z-index: 110;
+        overflow: hidden;
+    }
+
+    .sort-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px;
+        border-bottom: 1px solid #edf2f7;
+        background: #f8fafc;
+    }
+
+    .sort-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+        color: var(--dark-color);
+    }
+
+    .close-sort-menu {
+        background: none;
+        border: none;
+        color: #64748b;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .sort-options {
+        padding: 15px;
+    }
+
+    .sort-group {
+        margin-bottom: 20px;
+    }
+
+    .sort-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .sort-group-title {
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: var(--dark-color);
+    }
+
+    .sort-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .sort-option {
+        padding: 6px 12px;
+        background: #f1f5f9;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: var(--dark-color);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .sort-option:hover {
+        background: #e2e8f0;
+    }
+
+    .sort-option.active {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    /* Responsivité */
+    @media (max-width: 768px) {
         .sort-floating-button {
-            position: fixed;
-            bottom: 30px;
-            right: 100px; /* Décalé par rapport au FAB existant */
-            z-index: 100;
-        }
-        
-        .sort-btn {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 50px;
-            height: 50px;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            font-size: 24px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            cursor: pointer;
-            transition: transform 0.2s ease, background 0.2s ease;
-        }
-        
-        .sort-btn:hover {
-            transform: scale(1.1);
-            background: #4958b5;
-        }
-        
-        /* Menu de tri */
-        .sort-menu {
-            display: none;
-            position: fixed;
-            bottom: 90px;
+            bottom: 100px;
             right: 30px;
-            width: 300px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 5px 25px rgba(0,0,0,0.15);
-            z-index: 110;
-            overflow: hidden;
-        }
-        
-        .sort-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            border-bottom: 1px solid #edf2f7;
-            background: #f8fafc;
-        }
-        
-        .sort-header h3 {
-            margin: 0;
-            font-size: 1.1rem;
-            color: var(--dark-color);
-        }
-        
-        .close-sort-menu {
-            background: none;
-            border: none;
-            color: #64748b;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0;
-            line-height: 1;
-        }
-        
-        .sort-options {
-            padding: 15px;
-        }
-        
-        .sort-group {
-            margin-bottom: 20px;
-        }
-        
-        .sort-group:last-child {
-            margin-bottom: 0;
-        }
-        
-        .sort-group-title {
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: var(--dark-color);
-        }
-        
-        .sort-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        
-        .sort-option {
-            padding: 6px 12px;
-            background: #f1f5f9;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            color: var(--dark-color);
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .sort-option:hover {
-            background: #e2e8f0;
-        }
-        
-        .sort-option.active {
-            background: var(--primary-color);
-            color: white;
-        }
-        
-        /* Responsivité */
-        @media (max-width: 768px) {
-            .sort-floating-button {
-                bottom: 100px;
-                right: 30px;
-            }
-            
-            .sort-menu {
-                width: 280px;
-                max-height: 80vh;
-                overflow-y: auto;
-            }
-        }
-        
-        /* Animation pour l'ouverture du menu */
-        .sort-menu.open {
-            display: block;
-            animation: slideUp 0.3s ease;
-        }
-        
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
         }
 
-        /* Style spécifique pour les cartes possédées */
-        .card-box.owned .card-info-overlay {
-            background: rgba(38, 120, 76, 0.85);
+        .sort-menu {
+            width: 280px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    }
+
+    /* Animation pour l'ouverture du menu */
+    .sort-menu.open {
+        display: block;
+        animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
         }
 
-        /* Style spécifique pour les cartes recherchées */
-        .card-box.wanted .card-info-overlay {
-            background: rgba(49, 100, 189, 0.85);
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Style spécifique pour les cartes possédées */
+    .card-box.owned .card-info-overlay {
+        background: rgba(38, 120, 76, 0.85);
+    }
+
+    /* Style spécifique pour les cartes recherchées */
+    .card-box.wanted .card-info-overlay {
+        background: rgba(49, 100, 189, 0.85);
+    }
+
+    /* Style pour les cartes manquantes */
+    .card-box.missing .card-info-overlay {
+        background: rgba(80, 90, 110, 0.85);
+    }
+</style>
+
+<script src="{{ url_for('static', filename='js/card-sorting.js') }}"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Toggle entre les vues Collection et Recherchées
+        const viewButtons = document.querySelectorAll('.view-toggle button');
+        const collectionView = document.querySelectorAll('.collection-view');
+        const wantedView = document.querySelectorAll('.wanted-view');
+
+        // Restaurer la vue précédemment sélectionnée
+        const savedView = localStorage.getItem('pokeTrade_activeView') || 'collection';
+
+        // Appliquer la vue sauvegardée
+        if (savedView === 'wanted') {
+            viewButtons.forEach(btn => btn.classList.remove('active'));
+            document.querySelector('[data-view="wanted"]').classList.add('active');
+            collectionView.forEach(el => el.style.display = 'none');
+            wantedView.forEach(el => el.style.display = '');
         }
 
-        /* Style pour les cartes manquantes */
-        .card-box.missing .card-info-overlay {
-            background: rgba(80, 90, 110, 0.85);
-        }
-    </style>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Toggle entre les vues Collection et Recherchées
-            const viewButtons = document.querySelectorAll('.view-toggle button');
-            const collectionView = document.querySelectorAll('.collection-view');
-            const wantedView = document.querySelectorAll('.wanted-view');
-            
-            // Restaurer la vue précédemment sélectionnée
-            const savedView = localStorage.getItem('pokeTrade_activeView') || 'collection';
-            
-            // Appliquer la vue sauvegardée
-            if (savedView === 'wanted') {
+        viewButtons.forEach(button => {
+            button.addEventListener('click', function () {
+                // Mettre à jour les boutons
                 viewButtons.forEach(btn => btn.classList.remove('active'));
-                document.querySelector('[data-view="wanted"]').classList.add('active');
-                collectionView.forEach(el => el.style.display = 'none');
-                wantedView.forEach(el => el.style.display = '');
-            }
-            
-            viewButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    // Mettre à jour les boutons
-                    viewButtons.forEach(btn => btn.classList.remove('active'));
-                    this.classList.add('active');
-                    
-                    // Basculer les vues
-                    const view = this.getAttribute('data-view');
-                    if (view === 'collection') {
-                        wantedView.forEach(el => el.style.display = 'none');
-                        collectionView.forEach(el => el.style.display = '');
-                    } else {
-                        collectionView.forEach(el => el.style.display = 'none');
-                        wantedView.forEach(el => el.style.display = '');
-                    }
-                    
-                    // Sauvegarder la vue active
-                    localStorage.setItem('pokeTrade_activeView', view);
-                });
-            });
-            
-            // Modal pour afficher les détails d'une carte
-            const modal = document.getElementById('card-modal');
-            const closeModal = document.querySelector('.close-modal');
-            const cardBoxes = document.querySelectorAll('.card-box');
-            
-            cardBoxes.forEach(box => {
-                box.addEventListener('click', function() {
-                    const cardId = this.getAttribute('data-card-id');
-                    const setId = this.getAttribute('data-set-id');
-                    const cardNumber = this.getAttribute('data-card-number');
-                    const isOwned = this.classList.contains('owned');
-                    const isWanted = this.classList.contains('wanted');
-                    
-                    // Afficher les bonnes actions selon l'état de la carte
-                    document.getElementById('not-in-collection-actions').style.display = (!isOwned && !isWanted) ? 'block' : 'none';
-                    document.getElementById('in-collection-actions').style.display = isOwned ? 'block' : 'none';
-                    document.getElementById('wanted-card-actions').style.display = (!isOwned && isWanted) ? 'block' : 'none';
-                    
-                    // Désactiver le bouton "Ajouter aux recherches" si déjà recherchée
-                    const addToWantedBtn = document.getElementById('add-to-wanted');
-                    if (addToWantedBtn) {
-                        addToWantedBtn.disabled = isWanted;
-                        if (isWanted) {
-                            addToWantedBtn.textContent = 'Déjà dans vos recherches';
-                        } else {
-                            addToWantedBtn.textContent = 'Ajouter aux recherches';
-                        }
-                    }
-                    
-                    // Récupérer les infos de la carte via API
-                    fetch(`/card_info?set_id=${setId}&card_number=${cardNumber}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.exists) {
-                                document.getElementById('modal-card-image').src = data.image_url || 'path/to/placeholder.png';
-                                document.getElementById('modal-card-name').textContent = data.french_name || data.card_name;
-                                
-                                if (data.french_name && data.french_name !== data.card_name) {
-                                    document.getElementById('modal-card-original-name').textContent = `(${data.card_name})`;
-                                    document.getElementById('modal-card-original-name').style.display = 'block';
-                                } else {
-                                    document.getElementById('modal-card-original-name').style.display = 'none';
-                                }
-                                
-                                document.getElementById('modal-card-number').textContent = data.card_number;
-                                document.getElementById('modal-card-set').textContent = data.set_id;
-                                
-                                // Afficher la quantité si c'est une carte possédée
-                                if (isOwned) {
-                                    const quantity = this.querySelector('.card-quantity')?.textContent.replace('×', '') || '1';
-                                    document.getElementById('modal-card-quantity').textContent = quantity;
-                                    document.getElementById('modal-card-quantity-container').style.display = 'block';
-                                } else {
-                                    document.getElementById('modal-card-quantity-container').style.display = 'none';
-                                }
-                                
-                                // Nettoyer tout affichage précédent des propriétaires
-                                const existingOwners = document.querySelector('.card-owners');
-                                if (existingOwners) {
-                                    existingOwners.remove();
-                                }
-                                
-                                // Récupérer les propriétaires et les afficher
-                                console.log(`Récupération des propriétaires pour ${data.set_id}-${data.card_number}`);
-                                
-                                fetch(`/get_card_owners?set_id=${data.set_id}&card_number=${data.card_number}`)
-                                    .then(response => response.json())
-                                    .then(ownersData => {
-                                        console.log("Données des propriétaires reçues:", ownersData);
-                                        
-                                        if (ownersData.owners && ownersData.owners.length > 0) {
-                                            console.log(`${ownersData.owners.length} propriétaires trouvés`);
-                                            
-                                            const ownersSection = document.createElement('div');
-                                            ownersSection.className = 'card-owners';
-                                            
-                                            const title = document.createElement('h4');
-                                            title.textContent = 'Disponible chez:';
-                                            ownersSection.appendChild(title);
-                                            
-                                            const ownersList = document.createElement('ul');
-                                            ownersList.className = 'owners-list';
-                                            
-                                            ownersData.owners.forEach(owner => {
-                                                const ownerItem = document.createElement('li');
-                                                ownerItem.textContent = owner;
-                                                ownersList.appendChild(ownerItem);
-                                            });
-                                            
-                                            ownersSection.appendChild(ownersList);
-                                            document.querySelector('.card-info').appendChild(ownersSection);
-                                        } else {
-                                            console.log("Aucun propriétaire trouvé");
-                                        }
-                                    })
-                                    .catch(error => {
-                                        console.error("Erreur lors de la récupération des propriétaires:", error);
-                                    });
-                                
-                                modal.style.display = 'block';
-                            }
-                        });
-                });
-            });
-            
-            closeModal.addEventListener('click', function() {
-                modal.style.display = 'none';
-            });
-            
-            window.addEventListener('click', function(event) {
-                if (event.target === modal) {
-                    modal.style.display = 'none';
+                this.classList.add('active');
+
+                // Basculer les vues
+                const view = this.getAttribute('data-view');
+                if (view === 'collection') {
+                    wantedView.forEach(el => el.style.display = 'none');
+                    collectionView.forEach(el => el.style.display = '');
+                } else {
+                    collectionView.forEach(el => el.style.display = 'none');
+                    wantedView.forEach(el => el.style.display = '');
                 }
+
+                // Sauvegarder la vue active
+                localStorage.setItem('pokeTrade_activeView', view);
             });
-            
-            // Incrémenter la quantité
-            document.getElementById('increment-quantity').addEventListener('click', function() {
-                const setId = document.getElementById('modal-card-set').textContent;
-                const cardNumber = document.getElementById('modal-card-number').textContent;
-                
-                fetch('/increment_card', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        set_id: setId,
-                        card_number: cardNumber
-                    }),
-                })
+        });
+
+        // Modal pour afficher les détails d'une carte
+        const modal = document.getElementById('card-modal');
+        const closeModal = document.querySelector('.close-modal');
+        const cardBoxes = document.querySelectorAll('.card-box');
+
+        cardBoxes.forEach(box => {
+            box.addEventListener('click', function () {
+                const cardId = this.getAttribute('data-card-id');
+                const setId = this.getAttribute('data-set-id');
+                const cardNumber = this.getAttribute('data-card-number');
+                const isOwned = this.classList.contains('owned');
+                const isWanted = this.classList.contains('wanted');
+
+                // Afficher les bonnes actions selon l'état de la carte
+                document.getElementById('not-in-collection-actions').style.display = (!isOwned && !isWanted) ? 'block' : 'none';
+                document.getElementById('in-collection-actions').style.display = isOwned ? 'block' : 'none';
+                document.getElementById('wanted-card-actions').style.display = (!isOwned && isWanted) ? 'block' : 'none';
+
+                // Désactiver le bouton "Ajouter aux recherches" si déjà recherchée
+                const addToWantedBtn = document.getElementById('add-to-wanted');
+                if (addToWantedBtn) {
+                    addToWantedBtn.disabled = isWanted;
+                    if (isWanted) {
+                        addToWantedBtn.textContent = 'Déjà dans vos recherches';
+                    } else {
+                        addToWantedBtn.textContent = 'Ajouter aux recherches';
+                    }
+                }
+
+                // Récupérer les infos de la carte via API
+                fetch(`/card_info?set_id=${setId}&card_number=${cardNumber}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.exists) {
+                            document.getElementById('modal-card-image').src = data.image_url || 'path/to/placeholder.png';
+                            document.getElementById('modal-card-name').textContent = data.french_name || data.card_name;
+
+                            if (data.french_name && data.french_name !== data.card_name) {
+                                document.getElementById('modal-card-original-name').textContent = `(${data.card_name})`;
+                                document.getElementById('modal-card-original-name').style.display = 'block';
+                            } else {
+                                document.getElementById('modal-card-original-name').style.display = 'none';
+                            }
+
+                            document.getElementById('modal-card-number').textContent = data.card_number;
+                            document.getElementById('modal-card-set').textContent = data.set_id;
+
+                            // Afficher la quantité si c'est une carte possédée
+                            if (isOwned) {
+                                const quantity = this.querySelector('.card-quantity')?.textContent.replace('×', '') || '1';
+                                document.getElementById('modal-card-quantity').textContent = quantity;
+                                document.getElementById('modal-card-quantity-container').style.display = 'block';
+                            } else {
+                                document.getElementById('modal-card-quantity-container').style.display = 'none';
+                            }
+
+                            // Nettoyer tout affichage précédent des propriétaires
+                            const existingOwners = document.querySelector('.card-owners');
+                            if (existingOwners) {
+                                existingOwners.remove();
+                            }
+
+                            // Récupérer les propriétaires et les afficher
+                            console.log(`Récupération des propriétaires pour ${data.set_id}-${data.card_number}`);
+
+                            fetch(`/get_card_owners?set_id=${data.set_id}&card_number=${data.card_number}`)
+                                .then(response => response.json())
+                                .then(ownersData => {
+                                    console.log("Données des propriétaires reçues:", ownersData);
+
+                                    if (ownersData.owners && ownersData.owners.length > 0) {
+                                        console.log(`${ownersData.owners.length} propriétaires trouvés`);
+
+                                        const ownersSection = document.createElement('div');
+                                        ownersSection.className = 'card-owners';
+
+                                        const title = document.createElement('h4');
+                                        title.textContent = 'Disponible chez:';
+                                        ownersSection.appendChild(title);
+
+                                        const ownersList = document.createElement('ul');
+                                        ownersList.className = 'owners-list';
+
+                                        ownersData.owners.forEach(owner => {
+                                            const ownerItem = document.createElement('li');
+                                            ownerItem.textContent = owner;
+                                            ownersList.appendChild(ownerItem);
+                                        });
+
+                                        ownersSection.appendChild(ownersList);
+                                        document.querySelector('.card-info').appendChild(ownersSection);
+                                    } else {
+                                        console.log("Aucun propriétaire trouvé");
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error("Erreur lors de la récupération des propriétaires:", error);
+                                });
+
+                            modal.style.display = 'block';
+                        }
+                    });
+            });
+        });
+
+        closeModal.addEventListener('click', function () {
+            modal.style.display = 'none';
+        });
+
+        window.addEventListener('click', function (event) {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        // Incrémenter la quantité
+        document.getElementById('increment-quantity').addEventListener('click', function () {
+            const setId = document.getElementById('modal-card-set').textContent;
+            const cardNumber = document.getElementById('modal-card-number').textContent;
+
+            fetch('/increment_card', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    set_id: setId,
+                    card_number: cardNumber
+                }),
+            })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         const quantityElement = document.getElementById('modal-card-quantity');
                         const newQuantity = parseInt(quantityElement.textContent) + 1;
                         quantityElement.textContent = newQuantity;
-                        
+
                         // Mettre à jour l'affichage dans la grille
                         const cardBox = document.querySelector(`.card-box[data-set-id="${setId}"][data-card-number="${cardNumber}"]`);
                         let quantityBadge = cardBox.querySelector('.card-quantity');
-                        
+
                         if (quantityBadge) {
                             quantityBadge.textContent = `×${newQuantity}`;
                         } else {
@@ -1196,471 +1205,189 @@
                         }
                     }
                 });
-            });
-
-            // Gestion du tri des cartes
-            function setupSortingSystem() {
-                const sortMenuBtn = document.getElementById('open-sort-menu');
-                const sortMenu = document.getElementById('sort-menu');
-                const closeSortMenuBtn = document.querySelector('.close-sort-menu');
-                const sortOptions = document.querySelectorAll('.sort-option');
-                
-                // Ouvrir/fermer le menu de tri
-                sortMenuBtn.addEventListener('click', function() {
-                    sortMenu.classList.add('open');
-                });
-                
-                closeSortMenuBtn.addEventListener('click', function() {
-                    sortMenu.classList.remove('open');
-                });
-                
-                // Fermer le menu si on clique en dehors
-                window.addEventListener('click', function(event) {
-                    if (!sortMenu.contains(event.target) && event.target !== sortMenuBtn) {
-                        sortMenu.classList.remove('open');
-                    }
-                });
-                
-                // Le reste du code de tri...
-                sortOptions.forEach(option => {
-                    option.addEventListener('click', function() {
-                        // Mettre à jour la classe active
-                        sortOptions.forEach(btn => btn.classList.remove('active'));
-                        this.classList.add('active');
-                        
-                        // Récupérer les options de tri
-                        const sortType = this.getAttribute('data-sort');
-                        const sortOrder = this.getAttribute('data-order');
-                        const sortGroup = this.getAttribute('data-group');
-                        
-                        // Sauvegarder les préférences
-                        localStorage.setItem('pokeTrade_sortType', sortType);
-                        localStorage.setItem('pokeTrade_sortOrder', sortOrder);
-                        localStorage.setItem('pokeTrade_sortGroup', sortGroup);
-                        
-                        // Fermer le menu
-                        sortMenu.classList.remove('open');
-                        
-                        // Appliquer le tri (vous pouvez ajouter cette fonction plus tard)
-                        applySort(sortType, sortOrder, sortGroup === 'true');
-                    });
-                });
-            }
-
-            // Fonction temporaire pour le tri
-            function applySort(sortType, sortOrder, groupByCollection) {
-                console.log(`Tri appliqué: ${sortType}, ordre: ${sortOrder}, grouper: ${groupByCollection}`);
-                
-                // Déterminer la vue active
-                const activeView = localStorage.getItem('pokeTrade_activeView') || 'collection';
-                const viewSelector = activeView === 'collection' ? '.collection-view' : '.wanted-view';
-                
-                // Si on veut trier sans regroupement par collection
-                if (sortType !== 'collection' && !groupByCollection) {
-                    flattenAndSortCards(sortType, sortOrder, viewSelector);
-                } else {
-                    // On trie les sets et les cartes à l'intérieur
-                    sortSetsAndCards(sortType, sortOrder, viewSelector);
-                }
-            }
-
-            // Fonction pour aplatir et trier toutes les cartes (sans regroupement)
-            function flattenAndSortCards(sortType, sortOrder, viewSelector) {
-                // Cacher temporairement tous les conteneurs de séries
-                const setContainers = document.querySelectorAll(`${viewSelector} .set-container`);
-                setContainers.forEach(container => {
-                    container.style.display = 'none';
-                });
-                
-                // Créer un conteneur pour toutes les cartes aplaties
-                let flatContainer = document.querySelector(`${viewSelector} .flattened-cards-container`);
-                if (!flatContainer) {
-                    flatContainer = document.createElement('div');
-                    flatContainer.className = 'flattened-cards-container set-container';
-                    flatContainer.innerHTML = `
-                        <div class="set-header">
-                            <h2>Toutes les cartes</h2>
-                        </div>
-                        <div class="cards-grid" id="flattened-grid-${viewSelector.replace('.', '')}"></div>
-                    `;
-                    document.querySelector(viewSelector).appendChild(flatContainer);
-                } else {
-                    flatContainer.style.display = 'block';
-                }
-                
-                // Collecter toutes les cartes
-                const allCards = [];
-                document.querySelectorAll(`${viewSelector} .set-container:not(.flattened-cards-container) .card-box`).forEach(cardBox => {
-                    const clone = cardBox.cloneNode(true);
-                    
-                    // Récupérer les données importantes
-                    const setId = cardBox.getAttribute('data-set-id');
-                    const cardNumber = parseInt(cardBox.getAttribute('data-card-number'));
-                    const cardName = cardBox.getAttribute('data-card-name') || '';
-                    const isOwned = cardBox.classList.contains('owned');
-                    const isWanted = cardBox.classList.contains('wanted');
-                    const rarity = cardBox.getAttribute('data-rarity') || '';
-                    
-                    allCards.push({
-                        element: clone,
-                        setId: setId,
-                        cardNumber: cardNumber,
-                        name: cardName,
-                        isOwned: isOwned,
-                        isWanted: isWanted,
-                        rarity: rarity
-                    });
-                });
-                
-                // Appliquer le tri
-                let sortedCards;
-                switch (sortType) {
-                    case 'collection':
-                        sortedCards = allCards.sort((a, b) => {
-                            const result = sortOrder === 'asc' 
-                                ? a.setId.localeCompare(b.setId) 
-                                : b.setId.localeCompare(a.setId);
-                            return result !== 0 ? result : a.cardNumber - b.cardNumber;
-                        });
-                        break;
-                        
-                    case 'rarity':
-                        sortedCards = allCards.sort((a, b) => {
-                            const result = sortOrder === 'asc'
-                                ? rarityValue(a.rarity) - rarityValue(b.rarity)
-                                : rarityValue(b.rarity) - rarityValue(a.rarity);
-                            return result !== 0 ? result : (a.setId.localeCompare(b.setId) || a.cardNumber - b.cardNumber);
-                        });
-                        break;
-                        
-                    case 'missing':
-                        sortedCards = allCards.sort((a, b) => {
-                            const result = a.isOwned ? 1 : -1;
-                            return result !== 0 ? result : (a.setId.localeCompare(b.setId) || a.cardNumber - b.cardNumber);
-                        });
-                        break;
-                        
-                    case 'name':
-                        sortedCards = allCards.sort((a, b) => {
-                            return sortOrder === 'asc'
-                                ? a.name.localeCompare(b.name)
-                                : b.name.localeCompare(a.name);
-                        });
-                        break;
-                        
-                    case 'number':
-                        sortedCards = allCards.sort((a, b) => {
-                            return sortOrder === 'asc'
-                                ? a.cardNumber - b.cardNumber
-                                : b.cardNumber - a.cardNumber;
-                        });
-                        break;
-                }
-                
-                // Afficher les cartes triées
-                const grid = document.getElementById(`flattened-grid-${viewSelector.replace('.', '')}`);
-                grid.innerHTML = '';
-                
-                sortedCards.forEach(card => {
-                    grid.appendChild(card.element);
-                });
-            }
-
-            // Fonction pour trier les séries et les cartes à l'intérieur
-            function sortSetsAndCards(sortType, sortOrder, viewSelector) {
-                // Masquer le conteneur aplati s'il existe
-                const flatContainer = document.querySelector(`${viewSelector} .flattened-cards-container`);
-                if (flatContainer) {
-                    flatContainer.style.display = 'none';
-                }
-                
-                // Afficher tous les conteneurs de séries
-                const setContainers = document.querySelectorAll(`${viewSelector} .set-container:not(.flattened-cards-container)`);
-                setContainers.forEach(container => {
-                    container.style.display = 'block';
-                });
-                
-                // Collecter les infos des séries
-                const sets = [];
-                setContainers.forEach(container => {
-                    const setHeader = container.querySelector('.set-header h2');
-                    if (!setHeader) return;
-                    
-                    const setId = setHeader.textContent.split(' - ')[0].trim();
-                    const ownedCards = container.querySelectorAll('.card-box.owned').length;
-                    const totalCards = container.querySelectorAll('.card-box').length;
-                    
-                    sets.push({
-                        element: container,
-                        setId: setId,
-                        ownedCount: ownedCards,
-                        totalCount: totalCards,
-                        completionRate: totalCards > 0 ? ownedCards / totalCards : 0
-                    });
-                    
-                    // Trier les cartes à l'intérieur de chaque série
-                    sortCardsWithinSet(container, sortType, sortOrder);
-                });
-                
-                // Trier les séries
-                let sortedSets;
-                if (sortType === 'collection') {
-                    sortedSets = sets.sort((a, b) => {
-                        return sortOrder === 'asc'
-                            ? a.setId.localeCompare(b.setId)
-                            : b.setId.localeCompare(a.setId);
-                    });
-                } else if (sortType === 'missing') {
-                    sortedSets = sets.sort((a, b) => {
-                        return a.completionRate - b.completionRate;
-                    });
-                } else {
-                    // Pour les autres types de tri, on garde l'ordre des séries
-                    sortedSets = sets;
-                }
-                
-                // Réorganiser les séries dans le DOM
-                const container = document.querySelector(viewSelector);
-                sortedSets.forEach(set => {
-                    container.appendChild(set.element);
-                });
-            }
-
-            // Fonction pour trier les cartes à l'intérieur d'une série
-            function sortCardsWithinSet(setContainer, sortType, sortOrder) {
-                const cardsGrid = setContainer.querySelector('.cards-grid');
-                if (!cardsGrid) return;
-                
-                const cards = [];
-                
-                // Collecter les cartes
-                setContainer.querySelectorAll('.card-box').forEach(cardBox => {
-                    const cardNumber = parseInt(cardBox.getAttribute('data-card-number'));
-                    const cardName = cardBox.getAttribute('data-card-name') || '';
-                    const isOwned = cardBox.classList.contains('owned');
-                    const isWanted = cardBox.classList.contains('wanted');
-                    const rarity = cardBox.getAttribute('data-rarity') || '';
-                    
-                    cards.push({
-                        element: cardBox,
-                        cardNumber: cardNumber,
-                        name: cardName,
-                        isOwned: isOwned,
-                        isWanted: isWanted,
-                        rarity: rarity
-                    });
-                });
-                
-                // Trier les cartes
-                let sortedCards;
-                switch (sortType) {
-                    case 'collection':
-                    case 'missing':
-                        // Pour collection ou manquantes, on trie par numéro de carte
-                        sortedCards = cards.sort((a, b) => {
-                            if (sortType === 'missing' && a.isOwned !== b.isOwned) {
-                                return a.isOwned ? 1 : -1;
-                            }
-                            return a.cardNumber - b.cardNumber;
-                        });
-                        break;
-                        
-                    case 'rarity':
-                        sortedCards = cards.sort((a, b) => {
-                            const result = sortOrder === 'asc'
-                                ? rarityValue(a.rarity) - rarityValue(b.rarity)
-                                : rarityValue(b.rarity) - rarityValue(a.rarity);
-                            return result !== 0 ? result : a.cardNumber - b.cardNumber;
-                        });
-                        break;
-                        
-                    case 'name':
-                        sortedCards = cards.sort((a, b) => {
-                            return sortOrder === 'asc'
-                                ? a.name.localeCompare(b.name)
-                                : b.name.localeCompare(a.name);
-                        });
-                        break;
-                        
-                    case 'number':
-                        sortedCards = cards.sort((a, b) => {
-                            return sortOrder === 'asc'
-                                ? a.cardNumber - b.cardNumber
-                                : b.cardNumber - a.cardNumber;
-                        });
-                        break;
-                }
-                
-                // Réorganiser les cartes
-                cardsGrid.innerHTML = '';
-                sortedCards.forEach(card => {
-                    cardsGrid.appendChild(card.element);
-                });
-            }
-
-            // Fonction pour convertir une rareté en valeur numérique pour le tri
-            function rarityValue(rarity) {
-                if (!rarity) return 0;
-                if (rarity === 'Common') return 1;
-                if (rarity.startsWith('Diamond')) {
-                    return 2 + parseInt(rarity.split(' ')[1] || 0);
-                }
-                if (rarity.startsWith('Star')) {
-                    return 6 + parseInt(rarity.split(' ')[1] || 0);
-                }
-                if (rarity === 'Crown Rare') return 10;
-                return 0;
-            }
-
-            // Initialiser le système de tri
-            setupSortingSystem();
-
-            // 1. Fonction pour rendre les sets rétractables
-            function setupCollapsibleSets() {
-                // Pour chaque entête de set
-                document.querySelectorAll('.set-header').forEach(header => {
-                    header.addEventListener('click', function() {
-                        // Récupérer le conteneur parent
-                        const setContainer = this.closest('.set-container');
-                        // Basculer la classe collapsed
-                        setContainer.classList.toggle('collapsed');
-                        
-                        // Sauvegarder l'état dans le localStorage
-                        const setId = this.querySelector('h2').textContent.split(' - ')[0].trim();
-                        localStorage.setItem(`set_${setId}_collapsed`, setContainer.classList.contains('collapsed'));
-                    });
-                });
-                
-                // Restaurer l'état précédent depuis localStorage
-                document.querySelectorAll('.set-container').forEach(container => {
-                    const setId = container.querySelector('h2').textContent.split(' - ')[0].trim();
-                    const isCollapsed = localStorage.getItem(`set_${setId}_collapsed`) === 'true';
-                    
-                    if (isCollapsed) {
-                        container.classList.add('collapsed');
-                    }
-                });
-            }
-
-            // 2. Fonction pour mettre à jour les compteurs de cartes
-            function updateCardCounts() {
-                // Pour chaque conteneur de série
-                document.querySelectorAll('.collection-view .set-container').forEach(container => {
-                    // Compter toutes les cartes
-                    const totalCards = container.querySelectorAll('.cards-grid .card-box').length;
-                    
-                    // Compter les cartes avec la classe "owned"
-                    const ownedCards = container.querySelectorAll('.cards-grid .card-box.owned').length;
-                    
-                    // Mettre à jour le compteur
-                    const countElement = container.querySelector('.set-stats .card-count');
-                    if (countElement) {
-                        countElement.textContent = `${ownedCards} / ${totalCards}`;
-                        
-                        // Mettre en évidence les séries complètes ou avancées
-                        if (ownedCards === totalCards && totalCards > 0) {
-                            countElement.style.color = '#48bb78'; // vert
-                            countElement.style.fontWeight = 'bold';
-                        } else if (ownedCards > totalCards * 0.75) {
-                            countElement.style.color = '#3182ce'; // bleu
-                        }
-                    }
-                });
-            }
-
-            // 3. Ajouter les gestionnaires d'événements pour les boutons d'action
-
-            // Ajouter à la collection
-            document.getElementById('add-to-collection').addEventListener('click', function() {
-                const setId = document.getElementById('modal-card-set').textContent;
-                const cardNumber = document.getElementById('modal-card-number').textContent;
-                
-                fetch('/add_to_collection', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        set_id: setId,
-                        card_number: cardNumber
-                    }),
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Fermer la modale
-                        document.getElementById('card-modal').style.display = 'none';
-                        
-                        // Rafraîchir la page pour montrer les changements
-                        window.location.reload();
-                    } else {
-                        alert('Erreur: ' + data.message);
-                    }
-                });
-            });
-
-            // Ajouter aux recherches
-            document.getElementById('add-to-wanted').addEventListener('click', function() {
-                const setId = document.getElementById('modal-card-set').textContent;
-                const cardNumber = document.getElementById('modal-card-number').textContent;
-                
-                fetch('/add_to_wanted', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        set_id: setId,
-                        card_number: cardNumber
-                    }),
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Fermer la modale
-                        document.getElementById('card-modal').style.display = 'none';
-                        
-                        // Rafraîchir la page pour montrer les changements
-                        window.location.reload();
-                    } else {
-                        alert('Erreur: ' + data.message);
-                    }
-                });
-            });
-
-            // 4. Gestionnaires pour la suppression de compte
-            document.getElementById('delete-account-btn').addEventListener('click', function() {
-                document.getElementById('delete-account-modal').style.display = 'block';
-            });
-
-            document.getElementById('cancel-delete').addEventListener('click', function() {
-                document.getElementById('delete-account-modal').style.display = 'none';
-            });
-
-            document.getElementById('confirm-delete').addEventListener('click', function() {
-                fetch('/delete_account', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        window.location.href = '/';
-                    } else {
-                        alert('Erreur: ' + data.message);
-                    }
-                });
-            });
-
-            // 5. Appel des fonctions d'initialisation
-            // Configurer les sets rétractables
-            setupCollapsibleSets();
-
-            // Mettre à jour les compteurs de cartes
-            setTimeout(updateCardCounts, 300);
         });
-    </script>
+
+        // Utiliser le système de tri commun
+        const body = document.querySelector('body');
+        const sortPrefs = createSortUI(body, function (sortType, sortOrder, groupByCollection) {
+            applySort(sortType, sortOrder, groupByCollection);
+        });
+
+        // Appliquer le tri initial si des préférences sont sauvegardées
+        if (sortPrefs.sortType) {
+            const sortGroup = sortPrefs.sortGroup === 'true';
+            setTimeout(() => {
+                applySort(sortPrefs.sortType, sortPrefs.sortOrder, sortGroup);
+            }, 300);
+        }
+    });
+
+    function applySort(sortType, sortOrder, groupByCollection) {
+        console.log(`Tri appliqué: ${sortType}, ordre: ${sortOrder}, grouper: ${groupByCollection}`);
+
+        // Déterminer la vue active
+        const activeView = localStorage.getItem('pokeTrade_activeView') || 'collection';
+        const viewSelector = activeView === 'collection' ? '.collection-view' : '.wanted-view';
+
+        // Pour le tri par cartes manquantes ou sans regroupement
+        if ((sortType === 'missing' && !groupByCollection) || (sortType !== 'collection' && !groupByCollection)) {
+            flattenAndSortCards(sortType, sortOrder, viewSelector);
+        } else {
+            // Tri avec regroupement par collection
+            sortSetsAndCards(sortType, sortOrder, viewSelector);
+        }
+    }
+
+
+
+
+    // 1. Fonction pour rendre les sets rétractables
+    function setupCollapsibleSets() {
+        // Pour chaque entête de set
+        document.querySelectorAll('.set-header').forEach(header => {
+            header.addEventListener('click', function () {
+                // Récupérer le conteneur parent
+                const setContainer = this.closest('.set-container');
+                // Basculer la classe collapsed
+                setContainer.classList.toggle('collapsed');
+
+                // Sauvegarder l'état dans le localStorage
+                const setId = this.querySelector('h2').textContent.split(' - ')[0].trim();
+                localStorage.setItem(`set_${setId}_collapsed`, setContainer.classList.contains('collapsed'));
+            });
+        });
+
+        // Restaurer l'état précédent depuis localStorage
+        document.querySelectorAll('.set-container').forEach(container => {
+            const setId = container.querySelector('h2').textContent.split(' - ')[0].trim();
+            const isCollapsed = localStorage.getItem(`set_${setId}_collapsed`) === 'true';
+
+            if (isCollapsed) {
+                container.classList.add('collapsed');
+            }
+        });
+    }
+
+    // 2. Fonction pour mettre à jour les compteurs de cartes
+    function updateCardCounts() {
+        // Pour chaque conteneur de série
+        document.querySelectorAll('.collection-view .set-container').forEach(container => {
+            // Compter toutes les cartes
+            const totalCards = container.querySelectorAll('.cards-grid .card-box').length;
+
+            // Compter les cartes avec la classe "owned"
+            const ownedCards = container.querySelectorAll('.cards-grid .card-box.owned').length;
+
+            // Mettre à jour le compteur
+            const countElement = container.querySelector('.set-stats .card-count');
+            if (countElement) {
+                countElement.textContent = `${ownedCards} / ${totalCards}`;
+
+                // Mettre en évidence les séries complètes ou avancées
+                if (ownedCards === totalCards && totalCards > 0) {
+                    countElement.style.color = '#48bb78'; // vert
+                    countElement.style.fontWeight = 'bold';
+                } else if (ownedCards > totalCards * 0.75) {
+                    countElement.style.color = '#3182ce'; // bleu
+                }
+            }
+        });
+    }
+
+    // 3. Ajouter les gestionnaires d'événements pour les boutons d'action
+
+    // Ajouter à la collection
+    document.getElementById('add-to-collection').addEventListener('click', function () {
+        const setId = document.getElementById('modal-card-set').textContent;
+        const cardNumber = document.getElementById('modal-card-number').textContent;
+
+        fetch('/add_to_collection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                set_id: setId,
+                card_number: cardNumber
+            }),
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Fermer la modale
+                    document.getElementById('card-modal').style.display = 'none';
+
+                    // Rafraîchir la page pour montrer les changements
+                    window.location.reload();
+                } else {
+                    alert('Erreur: ' + data.message);
+                }
+            });
+    });
+
+    // Ajouter aux recherches
+    document.getElementById('add-to-wanted').addEventListener('click', function () {
+        const setId = document.getElementById('modal-card-set').textContent;
+        const cardNumber = document.getElementById('modal-card-number').textContent;
+
+        fetch('/add_to_wanted', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                set_id: setId,
+                card_number: cardNumber
+            }),
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Fermer la modale
+                    document.getElementById('card-modal').style.display = 'none';
+
+                    // Rafraîchir la page pour montrer les changements
+                    window.location.reload();
+                } else {
+                    alert('Erreur: ' + data.message);
+                }
+            });
+    });
+
+    // 4. Gestionnaires pour la suppression de compte
+    document.getElementById('delete-account-btn').addEventListener('click', function () {
+        document.getElementById('delete-account-modal').style.display = 'block';
+    });
+
+    document.getElementById('cancel-delete').addEventListener('click', function () {
+        document.getElementById('delete-account-modal').style.display = 'none';
+    });
+
+    document.getElementById('confirm-delete').addEventListener('click', function () {
+        fetch('/delete_account', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/';
+                } else {
+                    alert('Erreur: ' + data.message);
+                }
+            });
+    });
+
+    // 5. Appel des fonctions d'initialisation
+    // Configurer les sets rétractables
+    setupCollapsibleSets();
+
+    // Mettre à jour les compteurs de cartes
+    setTimeout(updateCardCounts, 300);
+
+
+</script>
 
 {% endblock %}
