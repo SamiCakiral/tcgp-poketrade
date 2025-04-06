@@ -4,7 +4,7 @@ beautifulsoup4==4.12.2
 google-cloud-storage==2.13.0
 gunicorn==21.2.0
 numpy
-opencv-python
+opencv-python-headless
 tensorflow
 scikit-learn
 ultralytics 

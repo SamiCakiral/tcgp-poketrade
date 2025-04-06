@@ -1293,6 +1293,6 @@ if __name__ == '__main__':
     # init_db()
 
     # Modifie cette ligne : ajoute ou change use_reloader=False
-    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5001) 
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=8080) 
     # J'ai gardé debug=True, mais tu peux aussi le mettre à False si besoin.
     # J'ai aussi gardé host et port s'ils étaient là. L'important est use_reloader=False. 
