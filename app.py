@@ -179,14 +179,9 @@ def dashboard():
     for set_row in all_sets:
         set_id = set_row['set_id']
         
-        # Récupérer le nom de la série
-        set_name = {
-            'A1': 'Puissance Génétique',
-            'A1a': 'Île Fabuleuse',
-            'A2': 'Choc Spatio-Temporelle',
-            'A2a': 'Lumière Triomphale',
-            'A2b': 'Réjouissances Rayonnantes'
-        }.get(set_id, set_id)
+        # Récupérer le nom de la série depuis la DB
+        set_info = conn.execute('SELECT name FROM sets WHERE set_id = ?', (set_id,)).fetchone()
+        set_name = set_info['name'] if set_info else set_id
         
         # Récupérer toutes les cartes de cette série
         set_cards = conn.execute('''
@@ -315,26 +310,26 @@ def search():
         conn, db_path = get_db_connection()
         
         # Chercher les utilisateurs qui ont cette carte en trop
-        users_with_extra = conn.execute('''
+        users_with_extra = conn.execute("""
             SELECT u.name, e.quantity
             FROM extra_cards e
             JOIN users u ON e.user_id = u.id
             WHERE e.set_id = ? AND e.card_number = ?
-        ''', (set_id, card_number)).fetchall()
+        """, (set_id, card_number)).fetchall()
         
         # Chercher les utilisateurs qui recherchent cette carte
-        users_wanting = conn.execute('''
+        users_wanting = conn.execute("""
             SELECT u.name
             FROM wanted_cards w
             JOIN users u ON w.user_id = u.id
             WHERE w.set_id = ? AND w.card_number = ?
-        ''', (set_id, card_number)).fetchall()
+        """, (set_id, card_number)).fetchall()
         
         # Obtenir les infos de la carte
-        card = conn.execute('''
+        card = conn.execute("""
             SELECT * FROM cards
             WHERE set_id = ? AND card_number = ?
-        ''', (set_id, card_number)).fetchone()
+        """, (set_id, card_number)).fetchone()
         
         conn.close()
         
@@ -343,7 +338,16 @@ def search():
                               users_with_extra=users_with_extra,
                               users_wanting=users_wanting)
     
-    return render_template('search.html')
+    # --- GET Request ---
+    # Récupérer toutes les séries disponibles pour le formulaire
+    conn, _ = get_db_connection()
+    available_sets_rows = conn.execute('SELECT set_id, name FROM sets ORDER BY set_id').fetchall()
+    conn.close()
+    
+    # Convertir les lignes en une liste de dictionnaires
+    available_sets = [{'set_id': row['set_id'], 'name': row['name']} for row in available_sets_rows]
+    
+    return render_template('search.html', available_sets=available_sets)
 
 @app.route('/card_info')
 def card_info():
@@ -637,28 +641,23 @@ def add_to_wanted():
 @app.route('/get_all_sets')
 @login_required
 def get_all_sets():
-    """Récupère toutes les séries disponibles"""
+    """Récupère toutes les séries disponibles avec leurs noms"""
     conn, db_path = get_db_connection()
     sets = conn.execute('SELECT DISTINCT set_id FROM cards ORDER BY set_id').fetchall()
-    conn.close()
-    
-    # Associer un nom à chaque série (à adapter selon vos données)
-    set_names = {
-        'A1': 'Puissance Génétique',
-        'A1a': 'Île Fabuleuse',
-        'A2': 'Choc Spatio-Temporelle',
-        'A2a': 'Lumière Triomphale',
-        'A2b': 'Réjouissances Rayonnantes'
-    }
     
     result = []
     for set_row in sets:
         set_id = set_row['set_id']
+        # Récupérer le nom associé depuis la table sets
+        set_info = conn.execute('SELECT name FROM sets WHERE set_id = ?', (set_id,)).fetchone()
+        set_name = set_info['name'] if set_info else set_id # Utilise set_id comme fallback
+        
         result.append({
             'set_id': set_id,
-            'name': set_names.get(set_id, '')
+            'name': set_name
         })
     
+    conn.close()
     return jsonify(result)
 
 @app.route('/hide_trade_notification', methods=['POST'])
@@ -899,10 +898,22 @@ def get_potential_trades():
     print(f"--- Trade list AFTER sorting (Count: {len(sorted_trades)}) ---")
     # print(sorted_trades)
 
+    # NOUVEAU: Exclure les échanges impliquant le set le plus récent
+    latest_set_id = get_latest_set_id()
+    final_trades = sorted_trades
+    if latest_set_id:
+        print(f"Exclusion des échanges pour le set le plus récent : {latest_set_id}")
+        final_trades = [
+            trade for trade in sorted_trades
+            if trade['your_card']['set_id'] != latest_set_id and trade['their_card']['set_id'] != latest_set_id
+        ]
+        print(f"--- Trade list AFTER excluding latest set (Count: {len(final_trades)}) ---")
+
     # Renvoyer les résultats
     return jsonify({
         'success': True,
-        'trades': sorted_trades
+        'trades': final_trades, # Utiliser la liste filtrée
+        'latest_set_id': latest_set_id # Ajouter l'ID du set exclu
     })
 
 def calculate_match_quality(user_extra_card, their_extra_card):
@@ -1292,6 +1303,21 @@ def get_trade_partners():
         conn.close()
 
     return jsonify({'users': partners})
+
+# --- Nouvelle Fonction Helper ---
+def get_latest_set_id():
+    """Récupère l'ID du set le plus récent (alphabétiquement) depuis la DB."""
+    conn, _ = get_db_connection()
+    latest_set = None
+    try:
+        result = conn.execute('SELECT set_id FROM sets ORDER BY set_id DESC LIMIT 1').fetchone()
+        if result:
+            latest_set = result['set_id']
+    except Exception as e:
+        print(f"Erreur lors de la récupération du dernier set_id: {e}")
+    finally:
+        conn.close()
+    return latest_set
 
 if __name__ == '__main__':
     # Assure-toi d'avoir init_db() appelé quelque part avant si nécessaire

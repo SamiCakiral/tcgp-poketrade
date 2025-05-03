@@ -6,13 +6,14 @@
     <div class="search-container">
         <form method="post" id="search-form">
             <div>
-                <label for="set_id">Série (ex: A1, A2a):</label>
+                <label for="set_id">Série :</label>
                 <select id="set_id" name="set_id" required>
-                    <option value="A1">A1 (Puissance Génétique)</option>
-                    <option value="A1a">A1a (Ile Fabuleuse)</option>
-                    <option value="A2">A2 (Choc Spatio-Temporelle)</option>
-                    <option value="A2a">A2a (Lumière Triomphale)</option>
-                    <option value="A2b">A2b (Réjouissances Rayonnantes)</option>
+                    <!-- Boucle Jinja pour générer les options dynamiquement -->
+                    {% for set in available_sets %}
+                        <option value="{{ set.set_id }}">{{ set.set_id }} ({{ set.name }})</option>
+                    {% else %}
+                        <option value="" disabled>Aucune série disponible</option>
+                    {% endfor %}
                 </select>
             </div>
             <div>

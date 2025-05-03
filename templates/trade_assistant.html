@@ -34,6 +34,9 @@
         </div>
     </div>
 
+    <!-- NOUVEAU: Zone pour afficher l'info sur le set exclu -->
+    <div id="excluded-set-info" class="excluded-set-message"></div>
+
     <div class="trades-container">
         <!-- Les échanges possibles seront injectés ici dynamiquement -->
         <div class="loading-trades">Recherche des échanges possibles...</div>
@@ -421,6 +424,18 @@
             font-family: inherit;
             min-width: 180px;
         }
+
+        /* NOUVEAU: Style pour le message du set exclu */
+        .excluded-set-message {
+            background-color: #fffbeb; /* Jaune pâle */
+            color: #92400e; /* Brun foncé */
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 0.9rem;
+            border: 1px solid #fde68a; /* Bordure jaune */
+        }
     </style>
 
     <script>
@@ -479,6 +494,14 @@
                 .then(response => response.json())
                 .then(data => {
                     tradesContainer.innerHTML = '';
+                    
+                    // NOUVEAU: Afficher l'info sur le set exclu
+                    const excludedSetInfo = document.getElementById('excluded-set-info');
+                    if (data.latest_set_id) {
+                        excludedSetInfo.textContent = `Note : Les échanges impliquant la série ${data.latest_set_id} sont actuellement désactivés.`;
+                    } else {
+                        excludedSetInfo.textContent = ''; // Effacer le message s'il n'y a pas de set exclu
+                    }
                     
                     if (data.trades.length === 0) {
                         tradesContainer.innerHTML = '<div class="no-trades-message">Aucun échange potentiel trouvé. Ajoutez plus de cartes à votre collection ou à votre liste de recherche.</div>';
