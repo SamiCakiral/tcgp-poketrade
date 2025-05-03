@@ -56,3 +56,9 @@ fake_dataset_maker.py
 yolo_dataset/
 
 _OLD/
+
+card_detector/resnet50_embedding.tflite
+convert_resnet_tflite.py
+
+*copy*
+.dockerignore

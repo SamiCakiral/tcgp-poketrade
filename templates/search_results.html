@@ -10,6 +10,9 @@
                 {% if card.french_name and card.french_name != card.card_name %}
                     <p class="card-original-name">({{ card.card_name }})</p>
                 {% endif %}
+                {% if card.rarity %}
+                    <p class="card-rarity">Rareté: {{ card.rarity }}</p>
+                {% endif %}
             </div>
             
             {% if card.image_url %}
@@ -49,6 +52,12 @@
     <p><a href="{{ url_for('search') }}" class="button">Nouvelle recherche</a></p>
 
     <style>
+        .card-rarity {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-top: 5px;
+        }
+
         @media (max-width: 768px) {
             .card-details {
                 flex-direction: column;

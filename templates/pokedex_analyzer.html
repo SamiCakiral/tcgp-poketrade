@@ -513,62 +513,118 @@ processButton.addEventListener('click', async () => {
     // Attendre la fin de toutes les analyses individuelles
     await Promise.allSettled(promises);
 
-    // Préparer les données pour l'agrégation backend
-    const resultsToSend = Object.values(analysisResultsCache).map(res => res);
+    // --- NOUVELLE LOGIQUE : Agrégation Locale --- 
+    let localDetectedSeriesIds = new Set();
+    let localPresentCardKeys = new Set();
+    let localErrors = [];
+    let imageCountWithAnchor = 0;
 
-    // Appeler la nouvelle API d'agrégation
-    console.log("Envoi des résultats individuels pour agrégation:", resultsToSend);
-    try {
-        const response = await fetch("{{ url_for('api_aggregate_analysis_results') }}", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ results: resultsToSend })
-        });
-        const aggregationData = await response.json();
+    console.log("[Agrégation Locale] Traitement des résultats individuels du cache:", analysisResultsCache);
 
-        if (response.ok && aggregationData.success) {
-            console.log("Résultats agrégés reçus:", aggregationData);
-            // Récupérer l'état utilisateur
-            try {
-                const statusResponse = await fetch("{{ url_for('get_user_cards_status') }}");
-                if (!statusResponse.ok) throw new Error('Erreur récupération statut utilisateur');
-                userCardsStatus = await statusResponse.json();
-                console.log("Statut collection utilisateur chargé:", userCardsStatus);
+    Object.values(analysisResultsCache).forEach(singleResultData => {
+        if (!singleResultData) return;
 
-                // === MODIFICATION ICI ===
-                // Stocker les données et afficher le bouton pour passer à l'étape 2
-                lastAggregationData = aggregationData; // Stocker les données
-                goToStep2Button.style.display = 'inline-block'; // Afficher le bouton
-                goToStep2Button.disabled = false;
-                processButton.textContent = 'Analyse terminée'; // Mettre à jour le texte du bouton analyse
-                // On NE LANCE PAS goToStep2() automatiquement ici
-                // === FIN MODIFICATION ===
+        const filename = singleResultData.result?.filename || 'Fichier inconnu';
 
-            } catch (statusError) {
-                 throw new Error(`Impossible de charger l'état de votre collection: ${statusError.message}`);
-            }
-        } else {
-            throw new Error(aggregationData.message || "Erreur lors de l'agrégation des résultats.");
+        if (!singleResultData.success || !singleResultData.result) {
+            localErrors.push(`${filename}: Résultat invalide ou manquant.`);
+            return;
         }
 
-    } catch (error) {
-        console.error("Erreur lors de l'appel d'agrégation ou chargement statut:", error);
-        globalErrorsStep1.innerHTML = `<li>Erreur finale: ${error.message}</li>`;
-        // Réactiver l'UI de l'étape 1 pour permettre une nouvelle tentative
+        const result = singleResultData.result;
+
+        if (result.error) {
+            localErrors.push(`${filename}: ${result.error}`);
+            // On continue même si une image a une erreur, pour agréger le reste
+        }
+
+        const anchorInfo = result.anchor_info || {};
+        const detections = result.detections || [];
+        // MODIFIÉ : Lire result.major_series au lieu de anchorInfo.major_series
+        const majorSeriesImg = result.major_series;
+
+        if (anchorInfo.status === "Trouvée" && majorSeriesImg) {
+            imageCountWithAnchor++;
+            localDetectedSeriesIds.add(majorSeriesImg);
+            console.log(`[Agrégation Locale] ${filename}: Série \`${majorSeriesImg}\` ajoutée.`);
+
+            // Collecter les cartes présentes et plausibles de CETTE image
+            detections.forEach(det => {
+                const predictedNumber = det.predicted_number;
+                const status = det.status || "Erreur Status";
+                const isCard = det.is_card;
+                // Condition pour être considérée comme présente et fiable pour CETTE image
+                const isPlausibleCard = isCard && 
+                                        status.includes("Présent") && 
+                                        !status.includes("Implausible") && 
+                                        predictedNumber != null;
+
+                if (isPlausibleCard) {
+                    const cardKey = `${majorSeriesImg}-${predictedNumber}`;
+                    localPresentCardKeys.add(cardKey);
+                    // console.log(`[Agrégation Locale] ${filename}: Carte \`${cardKey}\` ajoutée.`);
+                }
+            });
+        } else {
+             // Optionnel: Log si pas d'ancre, mais pas une erreur bloquante
+             // console.log(`[Agrégation Locale] ${filename}: Pas d\'ancre/série trouvée.`);
+             // MODIFIÉ : Condition d'erreur plus précise
+             if (anchorInfo.status === "Trouvée" && !majorSeriesImg && detections.length > 0) {
+                 localErrors.push(`${filename}: Ancre trouvée mais pas de série majeure retournée par l\'analyseur.`);
+             } else if (anchorInfo.status !== "Trouvée" && detections.length > 0) {
+                 // Pas d'erreur si juste pas d'ancre trouvée
+             }
+        }
+    });
+
+    // Construction de l'objet final local
+    const localAggregationData = {
+        success: true, // L'agrégation locale elle-même a réussi
+        detected_series_ids: Array.from(localDetectedSeriesIds).sort(),
+        present_card_keys: Array.from(localPresentCardKeys).sort(),
+        errors: localErrors
+    };
+    // --- FIN NOUVELLE LOGIQUE --- 
+
+    // Utiliser les données agrégées localement
+    console.log("[Agrégation Locale] Données finales:", localAggregationData);
+
+    // --- MODIFIÉ : Passer directement à l'étape 2 si succès --- 
+    if (localAggregationData.detected_series_ids.length > 0 || localAggregationData.present_card_keys.length > 0) {
+        // Au moins une série ou carte détectée, on peut passer à l'étape 2
+        lastAggregationData = localAggregationData; // Stocker les données locales
+        processButton.textContent = 'Analyse terminée';
+        processingInProgress = false; // Permettre d'interagir (mais bouton analyse reste désactivé)
+        processButton.disabled = true; 
+        goToStep2Button.style.display = 'none'; // Plus besoin de ce bouton
+
+        // Charger le statut utilisateur AVANT d'appeler goToStep2
+        fetchUserCardsStatus().then(() => {
+            goToStep2(localAggregationData); // APPELER DIRECTEMENT goToStep2
+        }).catch(statusError => {
+            console.error("Erreur chargement statut collection avant étape 2:", statusError);
+            globalErrorsStep1.innerHTML += `<li>Erreur critique chargement état collection: ${statusError.message}. Les données affichées à l'étape 2 seront incomplètes ou incorrectes.</li>`;
+            // Afficher un message d'erreur mais on pourrait quand même tenter d'aller à l'étape 2... 
+            // Ou bloquer ici ? Pour l'instant on affiche l'erreur et on arrête.
+            processingInProgress = false;
+            processButton.textContent = 'Erreur chargement Collection';
+            processButton.disabled = true;
+        });
+
+    } else {
+        // Aucune série ou carte détectée, afficher les erreurs et rester à l'étape 1
+        console.warn("[Agrégation Locale] Aucune série ou carte détectée après analyse.");
+        globalErrorsStep1.innerHTML = "<li>Aucune carte ou série n\'a pu être identifiée de manière fiable.</li>";
+        if (localAggregationData.errors.length > 0) {
+             globalErrorsStep1.innerHTML += "<ul>" + localAggregationData.errors.map(e => `<li>${e}</li>`).join('') + "</ul>";
+        }
+        // Réactiver l'UI de l'étape 1 pour nouvelle tentative
         processingInProgress = false;
-        // Réactiver le bouton analyse SEULEMENT si l'étape 1 n'a pas de fichiers sélectionnés
         processButton.textContent = 'Analyser les Fichiers';
         processButton.disabled = (selectedFiles.length === 0);
         document.querySelectorAll('.remove-file-button').forEach(btn => btn.style.display = '');
         globalProgressContainer.style.display = 'none';
-        goToStep2Button.style.display = 'none'; // Cacher en cas d'erreur
-    } finally {
-        // Assurer que processingInProgress est false si tout s'est bien passé mais qu'on attend l'action user
-        if (lastAggregationData) { // Si on a réussi et stocké les données
-             processingInProgress = false; // Permettre d'interagir (ex: enlever fichier et réanalyser)
-             // Garder processButton désactivé car l'analyse est finie pour ce set de fichiers
-             processButton.disabled = true;
-        }
+        goToStep2Button.style.display = 'none';
     }
 });
 
@@ -578,14 +634,15 @@ processButton.addEventListener('click', async () => {
 let currentDetectedSeriesIds = [];
 let currentPresentKeys = new Set();
 
-function goToStep2(aggregationData) {
+// === MODIFICATION: Rendre goToStep2 async pour pouvoir await populateVerificationGrid ===
+async function goToStep2(aggregationData) {
     step1Content.style.display = 'none';
     step2Content.style.display = 'block';
     stepIndicator1.classList.remove('active');
     stepIndicator1.classList.add('completed');
     stepIndicator2.classList.add('active');
     applyInitialStyles(); // S'assurer que les styles des étapes sont corrects
-    filterCardsInput.value = '';
+    filterCardsInput.value = ''; // Reset le filtre texte
 
     currentDetectedSeriesIds = aggregationData.detected_series_ids || [];
     currentPresentKeys = new Set(aggregationData.present_card_keys || []);
@@ -606,16 +663,22 @@ function goToStep2(aggregationData) {
         aggregationWarnings.innerHTML = '';
     }
 
-    populateVerificationGrid();
+    // === MODIFICATION: Attendre la fin du peuplement ===
+    await populateVerificationGrid(); // Peuple la grille avec tous les sets détectés
+    // === FIN MODIFICATION ===
+
+    // === NOUVEAU: Afficher tous les sets initialement et appliquer filtre texte vide ===
+    currentReviewSeriesId = null; // Pas de set spécifique sélectionné au début
+    filterVerificationGridBySet(null);
+    // === FIN NOUVEAU ===
 
     // Afficher la revue immédiatement si des fichiers ont été analysés
     if (selectedFiles.length > 0 && Object.keys(analysisResultsCache).length > 0) {
         console.log("Appel de showReviewer(0) depuis goToStep2.");
-        showReviewer(0); // Affiche la section et le premier screenshot
+        showReviewer(0); // Ceci appellera displayReviewContent qui filtrera par le set de la première image
     } else {
         console.warn("Pas de fichiers sélectionnés ou de cache d'analyse pour afficher la revue automatiquement.");
         reviewSection.style.display = 'none'; // Garder caché si pas de revue à faire
-        // Inutile de cacher reviewDetectedCardsContainer spécifiquement car il est dans reviewSection
     }
 }
 
@@ -890,8 +953,9 @@ backButton.addEventListener('click', () => {
     stepIndicator1.classList.add('active');
     applyInitialStyles();
 
+    // Vider la grille et reset les compteurs
     verificationGrid.innerHTML = '';
-    loadingVerificationGridMsg.textContent = 'Chargement des données utilisateur et des cartes...'; // Message par défaut
+    loadingVerificationGridMsg.textContent = 'Chargement des données utilisateur et des cartes...';
     loadingVerificationGridMsg.style.display = 'block';
     noCardsFoundStep2Msg.style.display = 'none';
     detectedSeriesList.textContent = 'Chargement...';
@@ -903,31 +967,27 @@ backButton.addEventListener('click', () => {
     saveStatusContainer.style.display = 'none';
     filterCardsInput.value = '';
 
+    // Reset état processing et boutons Étape 1
     processingInProgress = false;
-    // === Modification : Ne pas réactiver processButton si l'analyse a réussi ===
-    if (!lastAggregationData) { // Si on revient AVANT une analyse réussie
+    if (!lastAggregationData) {
         processButton.textContent = 'Analyser les Fichiers';
-    processButton.disabled = (selectedFiles.length === 0);
-    } else { // Si on revient APRES une analyse réussie (lastAggregationData existe)
+        processButton.disabled = (selectedFiles.length === 0);
+    } else {
         processButton.textContent = 'Analyse terminée';
-        processButton.disabled = true; // Garder désactivé, analyse déjà faite
-        goToStep2Button.style.display = 'inline-block'; // Garder le bouton étape 2 visible
+        processButton.disabled = true;
+        goToStep2Button.style.display = 'inline-block';
     }
-    // === Fin Modification ===
     document.querySelectorAll('.remove-file-button').forEach(btn => btn.style.display = '');
-    fileList.querySelectorAll('.file-analysis-feedback').forEach(span => span.textContent = ''); // Nettoyer feedback individuels
+    fileList.querySelectorAll('.file-analysis-feedback').forEach(span => span.textContent = '');
     globalProgressContainer.style.display = 'none';
 
-
-    // Assurer que la section revue ET la liste sont cachées
+    // Reset état de la revue
     reviewSection.style.display = 'none';
-    // reviewDetectedCardsContainer est DANS reviewSection, pas besoin de le cacher en plus
     reviewDetectedCardsGrid.innerHTML = '';
     currentReviewIndex = -1;
-    removeReviewHighlights(); // Important si on revient
-
-    // Inutile de cacher goToStep2Button ici si lastAggregationData existe (voir modif plus haut)
-    // Ne pas réinitialiser lastAggregationData ici, pour pouvoir re-cliquer sur "Voir les résultats"
+    currentReviewSeriesId = null; // === NOUVEAU: Reset le set ID en cours ===
+    removeReviewHighlights();
+    // Pas besoin d'appeler filterVerificationGridBySet ici car la grille est vidée.
 });
 
 
@@ -1037,6 +1097,88 @@ function applyInitialStyles() {
 applyInitialStyles();
 
 // --- Fonctions pour la Revue (Section Modifiée) ---
+
+// NOUVEAU: Variable globale pour suivre le set de la revue actuelle
+let currentReviewSeriesId = null;
+
+// NOUVEAU: Fonction pour filtrer la GRILLE PRINCIPALE par Set ID (et texte)
+function filterVerificationGridBySet(seriesIdToShow) {
+    console.log(`[FilterSet] Filtrage de la grille de vérification pour afficher uniquement le set: ${seriesIdToShow || 'TOUS'}`);
+    let visibleCardCount = 0;
+    let isCurrentSeriesVisible = false;
+    let lastSeparator = null;
+    const filterText = filterCardsInput.value.toLowerCase().trim();
+
+    verificationGrid.childNodes.forEach(node => {
+        if (node.nodeType !== Node.ELEMENT_NODE) return; // Ignorer les nœuds texte
+
+        if (node.classList.contains('series-separator')) {
+            // Cacher le séparateur précédent si aucune carte de sa série n'était visible (quand on filtre par set)
+            if (lastSeparator && !isCurrentSeriesVisible && seriesIdToShow) {
+                lastSeparator.style.display = 'none';
+            }
+            // Si on ne filtre pas par set, le séparateur précédent reste visible (géré par la condition suivante)
+
+            const separatorSetId = node.querySelector('.series-id')?.textContent;
+            // Afficher le séparateur si:
+            // 1. On n'a pas de filtre de set actif (seriesIdToShow est null)
+            // 2. OU si l'ID du séparateur correspond au set qu'on veut montrer
+            if (!seriesIdToShow || separatorSetId === seriesIdToShow) {
+                node.style.display = '';
+                isCurrentSeriesVisible = false; // Réinitialiser pour les cartes de cette nouvelle série
+                lastSeparator = node;
+            } else {
+                node.style.display = 'none'; // Cacher les autres séparateurs quand on filtre
+                isCurrentSeriesVisible = false;
+                lastSeparator = node; // Mémoriser quand même
+            }
+
+        } else if (node.classList.contains('card-box')) {
+            const cardSetId = node.dataset.setId;
+            let showCard = false;
+
+            // Condition 1: La carte doit appartenir au set filtré (ou pas de filtre set)
+            if (!seriesIdToShow || cardSetId === seriesIdToShow) {
+                // Condition 2: La carte doit correspondre au filtre texte (ou pas de filtre texte)
+                const cardName = (node.querySelector('.card-name-tag')?.textContent || '').toLowerCase();
+                const cardNumber = node.dataset.cardNumber || '';
+                const matchesTextFilter = filterText === '' || cardName.includes(filterText) || cardNumber.includes(filterText);
+
+                if (matchesTextFilter) {
+                    showCard = true;
+                }
+            }
+
+            // Afficher ou cacher la carte
+            node.style.display = showCard ? '' : 'none';
+
+            // Mettre à jour les compteurs et flags si la carte est affichée
+            if (showCard) {
+                visibleCardCount++;
+                // Si une carte est visible, la série actuelle est considérée visible
+                isCurrentSeriesVisible = true;
+            }
+
+        } else {
+             // Afficher autres éléments par défaut (ex: messages d'erreur)
+            node.style.display = '';
+        }
+    });
+
+     // Traitement final pour le dernier séparateur rencontré
+     if (lastSeparator && !isCurrentSeriesVisible && seriesIdToShow) {
+         // Si on filtrait par set et que la dernière série affichée n'avait aucune carte visible,
+         // on cache aussi son séparateur.
+         lastSeparator.style.display = 'none';
+     }
+
+    // Gérer le message "aucune carte trouvée"
+    const hasAnyCardsOrSeparators = Array.from(verificationGrid.children).some(el => el.classList.contains('card-box') || el.classList.contains('series-separator'));
+    // Afficher le message si aucune carte n'est visible ET qu'il y avait des éléments à afficher initialement.
+    noCardsFoundStep2Msg.style.display = (visibleCardCount === 0 && hasAnyCardsOrSeparators) ? 'block' : 'none';
+    loadingVerificationGridMsg.style.display = 'none'; // S'assurer que le chargement est caché
+}
+
 function showReviewer(startIndex = 0) {
     console.log("showReviewer appelée ! Index:", startIndex);
     if (selectedFiles.length === 0 || !analysisResultsCache || Object.keys(analysisResultsCache).length === 0) {
@@ -1061,6 +1203,7 @@ function displayReviewContent(index) {
     console.log(`displayReviewContent appelé pour index: ${index}.`);
     const cachedResult = analysisResultsCache[index];
     const file = selectedFiles[index];
+    currentReviewSeriesId = null; // Reset avant de potentiellement lire la nouvelle valeur
 
     // --- Affichage Panneau Gauche (Image + Contrôles) ---
     reviewFileInfo.textContent = `Capture ${index + 1} / ${selectedFiles.length} : ${file?.name || 'Nom inconnu'}`;
@@ -1072,6 +1215,7 @@ function displayReviewContent(index) {
     if (cachedResult && cachedResult.success && cachedResult.result) {
     const resultData = cachedResult.result;
     const base64ImageData = resultData.annotated_image_base64;
+    currentReviewSeriesId = resultData.major_series; // === NOUVEAU: Stocker le set ID de cette image ===
 
     if (base64ImageData) {
             reviewPlaceholderText.style.display = 'none';
@@ -1111,161 +1255,271 @@ function displayReviewContent(index) {
         reviewDetectedCardsContainer.style.display = 'block'; // Montrer le conteneur avec le message d'erreur
     }
 
-    // --- Mise à jour état et highlights ---
-    highlightCardsForReview(index); // Met en évidence les cartes DANS LA GRILLE DE VÉRIFICATION (pas la grille de revue)
-    updateReviewButtons(); // Met à jour Préc/Suiv
+    // === NOUVEAU: Appeler le filtre sur la grille principale ===
+    filterVerificationGridBySet(currentReviewSeriesId); // Filtre par le set de l'image (ou null si erreur)
+
+    // --- Mise à jour état et highlights --- (highlight a déjà sa propre logique de set)
+    highlightCardsForReview(index);
+    updateReviewButtons();
 }
 
 
 // --- MODIFIÉ : Fonction pour peupler la GRILLE de la revue (Panneau Droit) ---
 function populateReviewDetectedCardsGrid(imageIndex, resultData) {
     console.log(`[ReviewGrid] Peuplement pour index ${imageIndex}`);
-    reviewDetectedCardsGrid.innerHTML = ''; // Vider la grille
-    loadingReviewGridMsg.style.display = 'block'; // Afficher chargement
-    noReviewGridFoundMsg.style.display = 'none'; // Cacher "pas trouvé"
-    reviewDetectedCardsContainer.style.display = 'block'; // S'assurer que le conteneur est visible
+    reviewDetectedCardsGrid.innerHTML = '';
+    loadingReviewGridMsg.style.display = 'block';
+    noReviewGridFoundMsg.style.display = 'none';
+    reviewDetectedCardsContainer.style.display = 'block';
 
-    // Vérifications initiales (importantes)
-    if (!resultData || !resultData.grid_info || !resultData.detections) {
-         console.error(`[ReviewGrid] Données manquantes (resultData, grid_info ou detections) pour index ${imageIndex}`);
-         loadingReviewGridMsg.style.display = 'none';
-         noReviewGridFoundMsg.textContent = "Données de grille ou détections manquantes.";
-         noReviewGridFoundMsg.style.display = 'block';
-         return;
+    if (!reviewDetectedCardsGrid) {
+        console.error("[ReviewGrid] Erreur critique: L'élément DOM reviewDetectedCardsGrid n'a pas été trouvé!");
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = "Erreur interne: Impossible d'afficher la grille de revue.";
+        noReviewGridFoundMsg.style.display = 'block';
+        if(reviewDetectedCardsContainer) reviewDetectedCardsContainer.style.display = 'block';
+        return;
     }
 
+    // --- Vérifications Robustes --- 
+    if (!resultData) { console.error(`[ReviewGrid] Erreur: resultData est null/undefined pour index ${imageIndex}`); /* ... gestion erreur ... */ return; }
+    console.log("[ReviewGrid] resultData est valide.");
     const detections = resultData.detections;
+    if (!detections) { console.error(`[ReviewGrid] Erreur: resultData.detections est null/undefined pour index ${imageIndex}`); /* ... gestion erreur ... */ return; }
+    console.log("[ReviewGrid] resultData.detections est valide.");
     const gridInfo = resultData.grid_info;
-    const gridCols = gridInfo.cols_used > 0 ? gridInfo.cols_used : 5; // Utiliser cols_used si > 0, sinon 5 par défaut
-    const numRows = gridInfo.rows > 0 ? gridInfo.rows : (detections.length > 0 ? Math.ceil(detections.length / gridCols) : 0); // Calculer lignes si nécessaire
-    const seriesId = resultData.anchor_info?.major_series;
+    if (!gridInfo) { console.error(`[ReviewGrid] Erreur: resultData.grid_info est null/undefined pour index ${imageIndex}`); /* ... gestion erreur ... */ return; }
+    console.log("[ReviewGrid] resultData.grid_info est valide.", gridInfo);
+    // --- FIN Vérifications --- 
 
-    console.log(`[ReviewGrid] Création grille ${numRows}x${gridCols}. Série: ${seriesId || 'Non détectée'}`);
+    const gridCols = gridInfo.cols_used > 0 ? gridInfo.cols_used : 5;
+    const numRows = gridInfo.rows > 0 ? gridInfo.rows : (detections.length > 0 ? Math.ceil(detections.length / gridCols) : 0);
+    const seriesId = resultData.major_series;
+    const anchorInfo = resultData.anchor_info;
+    const offsetHeuristic = typeof resultData.offset_heuristic === 'number' ? resultData.offset_heuristic : 0; // Récupérer l'offset
+    const hasAnchor = anchorInfo && anchorInfo.status === "Trouvée" && typeof anchorInfo.number === 'number' && typeof anchorInfo.row === 'number' && typeof anchorInfo.col === 'number';
+
+    console.log(`[ReviewGrid] Création grille ${numRows}x${gridCols}. Série: ${seriesId || 'Non détectée'}. Ancre: ${hasAnchor}. Offset: ${offsetHeuristic}`);
     reviewDetectedCardsGrid.style.gridTemplateColumns = `repeat(${gridCols}, 1fr)`;
 
-    // Créer une map pour accéder rapidement aux détections par position
     const detectionMap = new Map();
     detections.forEach(det => {
         if (det.row !== undefined && det.col !== undefined && det.row >= 0 && det.col >= 0) {
             detectionMap.set(`${det.row}-${det.col}`, det);
-        } else {
-            // Optionnel: Gérer les détections sans position (ex: hors grille) si nécessaire
-             console.warn("[ReviewGrid] Détection sans position valide:", det);
         }
     });
 
     let slotsPopulated = 0;
-    if (numRows === 0) { // Si aucune ligne n'est définie et aucune détection n'a été trouvée
-        console.log("[ReviewGrid] Aucune ligne ou détection, affichage message 'pas de grille'.");
+    if (numRows === 0 || gridCols === 0) {
+        console.log("[ReviewGrid] Aucune ligne ou colonne valide, affichage message \'pas de grille\'.");
         loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = "Impossible de déterminer la structure de la grille.";
         noReviewGridFoundMsg.style.display = 'block';
         return;
     }
 
-
     for (let r = 0; r < numRows; r++) {
         for (let c = 0; c < gridCols; c++) {
-            const det = detectionMap.get(`${r}-${c}`);
             const slotClone = reviewGridSlotTemplate.content.cloneNode(true);
             const slotDiv = slotClone.querySelector('.review-grid-slot');
             const img = slotClone.querySelector('.review-card-img');
             const placeholder = slotClone.querySelector('.review-card-placeholder');
             const numberSpan = slotClone.querySelector('.review-card-number');
+            // const manualBadge = slotClone.querySelector('.review-manual-badge'); // Plus utilisé ici
 
-            let slotStatus = 'empty-inferred'; // Statut par défaut si aucune détection à cet emplacement
+            const det = detectionMap.get(`${r}-${c}`);
+            let slotStatus = 'empty-inferred';
             let cardKey = '';
-            let predictedNumStr = ''; // Numéro texte à afficher (placeholder ou badge)
-            slotDiv.title = `Emplacement vide (${r},${c})`; // Titre par défaut
+            let predictedNumStr = '?';
+            let finalPredictedNumber = null;
 
-            if (det) {
-                 // Une détection existe pour ce slot
-                slotStatus = det.status || 'unknown';
-                const predictedNumber = det.predicted_number; // Peut être null
-                const isCard = det.is_card; // true/false
-                predictedNumStr = predictedNumber != null ? String(predictedNumber) : '?';
-                placeholder.textContent = predictedNumStr; // Afficher le numéro prédit dans le placeholder
-
-                 // Déterminer si c'est une carte plausible à afficher
-                 // Conditions: is_card=true, status contient "Présent", status ne contient PAS "Implausible", un numéro est prédit, et une série est connue
-                const isPlausibleCard = isCard &&
-                                        slotStatus.includes("Présent") &&
-                                        !slotStatus.includes("Implausible") &&
-                                        predictedNumber != null &&
-                                        seriesId;
-
-                if (isPlausibleCard) {
-                    slotStatus = 'present'; // Clarifier le statut interne
-                    cardKey = `${seriesId}-${predictedNumber}`;
-                    slotDiv.dataset.cardKey = cardKey; // Stocker la clé pour référence future éventuelle
-                    numberSpan.textContent = predictedNumStr; // Mettre le numéro dans le badge
-
-                    // Essayer de trouver l'image officielle
-                    const cardData = allCardsData[cardKey];
-                    if (cardData && cardData.image_url) {
-                         console.log(`[ReviewGrid Slot ${r}-${c}] Carte ${cardKey} trouvée. URL: ${cardData.image_url}`);
-                         img.onload = () => { img.style.display = 'block'; placeholder.style.display = 'none'; };
-                         img.onerror = () => { console.error(`Erreur chargement image pour ${cardKey}`); img.style.display = 'none'; placeholder.style.display = 'flex'; placeholder.textContent = predictedNumStr + ' ERR';};
-                            img.src = cardData.image_url;
-                            img.alt = cardData.french_name || cardData.card_name || cardKey;
-                            slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte inconnue'} (${cardKey})`;
-                        } else {
-                         console.warn(`[ReviewGrid Slot ${r}-${c}] Carte ${cardKey} non trouvée ou sans image dans allCardsData.`);
-                         img.style.display = 'none'; placeholder.style.display = 'flex'; placeholder.textContent = predictedNumStr + ' (?)';
-                         slotDiv.title = `Carte ${cardKey} détectée mais info manquante`;
-                         slotStatus = 'present-no-data'; // Statut spécifique si besoin
+            // 1. Calculer le numéro attendu si ancre valide
+            if (hasAnchor && seriesId) {
+                predictedNumStr = 'ERR'; // Valeur par défaut en cas d'échec interne
+                try {
+                    const anchorNumOriginal = anchorInfo.number;
+                    const anchorR = anchorInfo.row;
+                    const anchorC = anchorInfo.col;
+                    // Vérifier que gridCols est bien un nombre > 0
+                    if (typeof gridCols !== 'number' || gridCols <= 0) {
+                         throw new Error(`gridCols invalide: ${gridCols}`);
                     }
-                } else if (isCard) {
-                     // Détecté comme carte, mais pas 'Présent' ou 'Implausible' etc.
-                     slotStatus = 'detected-issue'; // Regrouper les cas problématiques
-                     img.style.display = 'none'; placeholder.style.display = 'flex';
-                     placeholder.textContent = predictedNumStr + ' !'; // Marquer le problème
-                     numberSpan.textContent = predictedNumStr;
-                     slotDiv.title = `Problème détection (${det.status || 'statut inconnu'}) - Numéro ${predictedNumStr}`;
-                } else {
-                     // Détecté, mais PAS une carte (ex: slot vide attendu)
-                     slotStatus = 'empty-slot';
-                     img.style.display = 'none'; placeholder.style.display = 'flex';
-                     placeholder.textContent = predictedNumStr; // Peut être utile de voir le numéro attendu
-                     numberSpan.textContent = ''; // Pas de numéro de carte
-                     slotDiv.title = `Emplacement vide détecté (attendu ${predictedNumStr})`;
+                    const expectedRelative = anchorNumOriginal + (r * gridCols + c) - (anchorR * gridCols + anchorC);
+                    finalPredictedNumber = expectedRelative + offsetHeuristic;
+                    // Vérifier si le résultat est un nombre valide
+                    if (typeof finalPredictedNumber === 'number' && !isNaN(finalPredictedNumber)) {
+                         predictedNumStr = String(finalPredictedNumber);
+                    } else {
+                         console.warn(`[ReviewGrid Slot ${r}-${c}] Calcul de finalPredictedNumber invalide:`, finalPredictedNumber);
+                         predictedNumStr = 'NaN'; // Indiquer un problème de calcul
+                    }
+                } catch (calcError) {
+                    console.error(`[ReviewGrid Slot ${r}-${c}] Erreur calcul numéro attendu:`, calcError);
+                    predictedNumStr = 'ERR'; // Garder ERR en cas d'exception explicite
                 }
-
             } else {
-                // Aucune détection pour ce slot (r, c) -> Vide inféré
-                slotStatus = 'empty-inferred';
-                img.style.display = 'none'; placeholder.style.display = 'flex';
-                placeholder.textContent = ''; // Pas de numéro
-                numberSpan.textContent = '';
-                slotDiv.title = `Emplacement vide (${r},${c})`;
+                // Si pas d'ancre ou de série, on ne peut pas calculer, garder '?' par défaut
+                // predictedNumStr reste '?'
+                 console.log(`[ReviewGrid Slot ${r}-${c}] Pas d\'ancre ou de série pour calculer le numéro.`);
             }
 
-            // Appliquer la classe CSS basée sur le statut final
-            slotDiv.className = 'review-grid-slot'; // Reset classes
+            // 2. Déterminer le statut initial et l'apparence basé sur la détection IA (si elle existe)
+            if (det) {
+                 slotStatus = det.status || 'unknown';
+                 const isCard = det.is_card;
+                 const isPlausibleCard = isCard &&
+                                         slotStatus.includes("Présent") &&
+                                         !slotStatus.includes("Implausible") &&
+                                         finalPredictedNumber != null && // Vérifier le numéro calculé
+                                         seriesId;
+
+                 if (isPlausibleCard) {
+                    slotStatus = 'present';
+                    cardKey = `${seriesId}-${finalPredictedNumber}`;
+                    numberSpan.textContent = predictedNumStr;
+                    const cardData = allCardsData[cardKey];
+                    if (cardData && cardData.image_url) {
+                        img.onload = () => { img.style.display = 'block'; placeholder.style.display = 'none'; };
+                        img.onerror = () => { console.error(`Erreur chargement ${cardKey}`); img.style.display = 'none'; placeholder.style.display = 'flex'; placeholder.textContent = predictedNumStr + ' ERR';};
+                        img.src = cardData.image_url;
+                        img.alt = cardData.french_name || cardData.card_name || cardKey;
+                        slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte'} (${cardKey})`;
+                    } else {
+                        img.style.display = 'none'; placeholder.style.display = 'flex';
+                        placeholder.textContent = predictedNumStr + ' (?)';
+                        slotDiv.title = `Carte ${cardKey} (info manquante)`;
+                        slotStatus = 'present-no-data';
+                    }
+                 } else if (isCard) {
+                    slotStatus = 'detected-issue';
+                    img.style.display = 'none'; placeholder.style.display = 'flex';
+                    placeholder.textContent = predictedNumStr + ' !';
+                    numberSpan.textContent = predictedNumStr;
+                    slotDiv.title = `Problème détection (${det.status || '?'}) - ${predictedNumStr}`;
+                 } else { // Vide Détecté par YOLO
+                    slotStatus = 'empty-slot';
+                    img.style.display = 'none'; placeholder.style.display = 'flex';
+                    placeholder.textContent = predictedNumStr; // Afficher le numéro attendu s\'il existe
+                    numberSpan.textContent = '';
+                    slotDiv.title = `Emplacement vide détecté (attendu ${predictedNumStr})`;
+                 }
+            } else {
+                // Pas de détection IA -> Vide Inféré
+                slotStatus = 'empty-inferred';
+                img.style.display = 'none'; placeholder.style.display = 'flex';
+                placeholder.textContent = predictedNumStr; // Afficher numéro attendu si calculé
+                numberSpan.textContent = '';
+                slotDiv.title = `Emplacement vide (attendu ${predictedNumStr})`;
+            }
+
+            // 3. Stocker les données et ajouter le listener
+            slotDiv.dataset.row = r;
+            slotDiv.dataset.col = c;
+            slotDiv.dataset.imageIndex = imageIndex;
+            slotDiv.dataset.cardKey = cardKey; // Peut être vide initialement
+            slotDiv.dataset.status = slotStatus;
+            slotDiv.dataset.originalStatus = slotStatus; // Statut initial avant clic
+            slotDiv.dataset.predictedNumber = finalPredictedNumber != null ? String(finalPredictedNumber) : ''; // Stocker le numéro calculé
+            slotDiv.dataset.seriesId = seriesId || ''; // Stocker la série si elle existe
+
+            slotDiv.className = 'review-grid-slot';
             slotDiv.classList.add(`status-${slotStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
-            slotDiv.dataset.status = slotStatus; // Stocker le statut calculé
+
+            slotDiv.addEventListener('click', handleSlotToggle);
 
             reviewDetectedCardsGrid.appendChild(slotClone);
             slotsPopulated++;
         }
     }
 
-    loadingReviewGridMsg.style.display = 'none'; // Cacher chargement
-    noReviewGridFoundMsg.style.display = (slotsPopulated === 0) ? 'block' : 'none'; // Afficher si rien n'a été ajouté
+    loadingReviewGridMsg.style.display = 'none';
+    noReviewGridFoundMsg.style.display = (slotsPopulated === 0) ? 'block' : 'none';
     console.log(`[ReviewGrid] Fin peuplement. ${slotsPopulated} slots ajoutés à la grille.`);
 }
 
+// --- MODIFIÉ : Fonction pour basculer l'état d'un slot au clic --- 
+function handleSlotToggle(event) {
+    const slotDiv = event.currentTarget;
+    const currentStatus = slotDiv.dataset.status;
+    const seriesId = slotDiv.dataset.seriesId;
+    const predictedNumberStr = slotDiv.dataset.predictedNumber;
+    const currentCardKey = slotDiv.dataset.cardKey;
+
+    const isCurrentlyConsideredPresent = currentStatus === 'present' ||
+                                         currentStatus === 'present-no-data' ||
+                                         currentStatus === 'manually-present';
+
+    const img = slotDiv.querySelector('.review-card-img');
+    const placeholder = slotDiv.querySelector('.review-card-placeholder');
+    const numberSpan = slotDiv.querySelector('.review-card-number');
+
+    if (isCurrentlyConsideredPresent) {
+        // --- Basculer vers Absent --- 
+        console.log(`[Toggle] Slot ${seriesId}-${predictedNumberStr} (Key: ${currentCardKey}) -> Absent`);
+        slotDiv.dataset.status = 'manually-absent';
+        slotDiv.dataset.cardKey = ''; // Vider la clé
+        slotDiv.className = 'review-grid-slot status-manually-absent';
+        img.style.display = 'none';
+        placeholder.style.display = 'flex';
+        placeholder.textContent = 'X'; // Marqueur visuel absent
+        numberSpan.textContent = predictedNumberStr; // Garder le numéro visible ? Ou vider ? Gardons pour info.
+        slotDiv.title = `Manuellement marqué absent (était ${predictedNumberStr})`;
+        // Mettre à jour la grille principale
+        if (currentCardKey) {
+            updateCardDetectionStatus(currentCardKey, false); // Notifier la suppression
+        }
+    } else {
+        // --- Basculer vers Présent --- 
+        if (!seriesId || !predictedNumberStr) {
+            console.warn('[Toggle] Impossible de marquer comme présent: série ou numéro prédit manquant.', slotDiv.dataset);
+            // Optionnel: feedback visuel temporaire ?
+            return; // Ne rien faire si infos manquantes
+        }
+
+        const cardKey = `${seriesId}-${predictedNumberStr}`;
+        console.log(`[Toggle] Slot ${seriesId}-${predictedNumberStr} -> Présent (Clé: ${cardKey})`);
+        slotDiv.dataset.status = 'manually-present';
+        slotDiv.dataset.cardKey = cardKey;
+        slotDiv.className = 'review-grid-slot status-manually-present';
+        numberSpan.textContent = predictedNumberStr;
+
+        const cardData = allCardsData[cardKey];
+        if (cardData && cardData.image_url) {
+            img.src = cardData.image_url;
+            img.alt = cardData.french_name || cardData.card_name || cardKey;
+            img.style.display = 'block';
+            placeholder.style.display = 'none';
+            slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte'} (${cardKey}) - Ajout Manuel`;
+        } else {
+            img.style.display = 'none';
+            placeholder.style.display = 'flex';
+            placeholder.textContent = predictedNumberStr + ' (?)'; // Indiquer que l\'image manque
+            slotDiv.title = `Carte ${cardKey} (info manquante) - Ajout Manuel`;
+        }
+        // Mettre à jour la grille principale
+        updateCardDetectionStatus(cardKey, true); // Notifier l\'ajout
+    }
+
+    // Mettre à jour les compteurs et la grille principale DANS TOUS LES CAS
+    updateSummaryCounters();
+    // Re-appliquer le highlight pour cette image
+    highlightCardsForReview(parseInt(slotDiv.dataset.imageIndex, 10)); 
+}
 
 // --- Fonction pour mettre en évidence les cartes dans la GRILLE DE VERIFICATION (inchangée pour l'instant) ---
 function highlightCardsForReview(imageIndex) {
     removeReviewHighlights(); // Nettoyer les highlights précédents
 
     const cachedResult = analysisResultsCache[imageIndex];
-    if (!cachedResult || !cachedResult.success || !cachedResult.result || !cachedResult.result.detections || !cachedResult.result.anchor_info?.major_series) {
+    // MODIFIÉ: Vérifier resultData.major_series au lieu de anchor_info.major_series
+    if (!cachedResult || !cachedResult.success || !cachedResult.result || !cachedResult.result.detections || !cachedResult.result.major_series) { 
         console.warn(`Données incomplètes pour highlight review de l'index ${imageIndex}`);
         return;
     }
     const resultData = cachedResult.result;
-    const seriesId = resultData.anchor_info.major_series;
+    // MODIFIÉ: Lire la série depuis resultData.major_series
+    console.log("[Highlight] Inspecting resultData:", JSON.stringify(resultData, null, 2)); // AJOUT LOG
+    const seriesId = resultData.major_series; // Correction ici
     const detectedInThisImage = new Set();
 
     resultData.detections.forEach(det => {
@@ -1323,11 +1577,19 @@ reviewNextButton.addEventListener('click', () => {
 });
 
 closeReviewButton.addEventListener('click', () => {
+    // ... (Ancien code pour la confirmation potentiel) ...
+     if (manuallyModifiedSlots.size > 0) {
+        // ... (logique confirm inchangée) ...
+     }
+     // === FIN Ancien code ===
+
     reviewSection.style.display = 'none'; // Cacher toute la section
     reviewDetectedCardsGrid.innerHTML = ''; // Vider la GRILLE de revue
     reviewScreenshotImage.src = ''; // Vider l'image
     currentReviewIndex = -1;
+    currentReviewSeriesId = null; // === NOUVEAU: Reset le set ID en cours ===
     removeReviewHighlights(); // Enlever les highlights de la grille principale
+    filterVerificationGridBySet(null); // === NOUVEAU: Réafficher tous les sets dans la grille principale ===
 });
 
 // --- Listener pour le bouton "Voir les résultats" (inchangé) ---
@@ -1359,162 +1621,239 @@ let manuallyModifiedSlots = new Map(); // Stocke les modifications par slot (row
 // Modification de la fonction populateReviewDetectedCardsGrid
 function populateReviewDetectedCardsGrid(imageIndex, resultData) {
     console.log(`[ReviewGrid] Peuplement pour index ${imageIndex}`);
+
+    // AJOUT : Vérification cruciale de l'élément DOM lui-même
+    if (!reviewDetectedCardsGrid) {
+        console.error("[ReviewGrid] Erreur critique: L'élément DOM reviewDetectedCardsGrid n'a pas été trouvé!");
+        // Afficher une erreur plus visible à l'utilisateur si possible
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = "Erreur interne: Impossible d'afficher la grille de revue.";
+        noReviewGridFoundMsg.style.display = 'block';
+        if(reviewDetectedCardsContainer) reviewDetectedCardsContainer.style.display = 'block';
+        return; // Arrêter ici
+    }
+
     reviewDetectedCardsGrid.innerHTML = ''; // Vider la grille
     loadingReviewGridMsg.style.display = 'block'; // Afficher chargement
     noReviewGridFoundMsg.style.display = 'none'; // Cacher "pas trouvé"
     reviewDetectedCardsContainer.style.display = 'block'; // S'assurer que le conteneur est visible
 
-    // Vérifications initiales (importantes)
-    if (!resultData || !resultData.grid_info || !resultData.detections) {
-        console.error(`[ReviewGrid] Données manquantes pour index ${imageIndex}`);
+    // === AJOUT : Vérifications Robustes au début ===
+    if (!resultData) {
+        console.error(`[ReviewGrid] Erreur: resultData est null ou undefined pour index ${imageIndex}`);
         loadingReviewGridMsg.style.display = 'none';
-        noReviewGridFoundMsg.textContent = "Données de grille ou détections manquantes.";
+        noReviewGridFoundMsg.textContent = "Erreur interne: Données d'analyse invalides.";
         noReviewGridFoundMsg.style.display = 'block';
         return;
     }
+    console.log("[ReviewGrid] resultData est valide.");
 
     const detections = resultData.detections;
+    if (!detections) {
+        console.error(`[ReviewGrid] Erreur: resultData.detections est null ou undefined pour index ${imageIndex}`);
+        // On pourrait continuer sans détections, mais afficher un avertissement
+        // Pour l'instant, traitons comme une erreur bloquante pour la grille
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = "Erreur interne: Données de détections manquantes.";
+        noReviewGridFoundMsg.style.display = 'block';
+        return; // Ou adapter pour afficher une grille vide
+    }
+    console.log("[ReviewGrid] resultData.detections est valide.");
+
     const gridInfo = resultData.grid_info;
-    const gridCols = gridInfo.cols_used > 0 ? gridInfo.cols_used : 5;
-    const numRows = gridInfo.rows > 0 ? gridInfo.rows : Math.ceil(detections.length / gridCols);
-    const seriesId = resultData.anchor_info?.major_series;
+    if (!gridInfo) {
+        console.error(`[ReviewGrid] Erreur: resultData.grid_info est null ou undefined pour index ${imageIndex}`);
+        // Sans gridInfo, on ne peut pas dessiner la grille
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = "Erreur interne: Informations de grille manquantes.";
+        noReviewGridFoundMsg.style.display = 'block';
+        return;
+    }
+    console.log("[ReviewGrid] resultData.grid_info est valide.", gridInfo);
+    // === FIN AJOUT Vérifications ===
 
-    console.log(`[ReviewGrid] Création grille ${numRows}x${gridCols}. Série: ${seriesId || 'Non détectée'}`);
-    reviewDetectedCardsGrid.style.gridTemplateColumns = `repeat(${gridCols}, 1fr)`;
+    // Calcul de gridCols et numRows (maintenu robuste)
+    let gridCols = 5; 
+    if (gridInfo && typeof gridInfo.cols_used === 'number' && gridInfo.cols_used > 0) { gridCols = gridInfo.cols_used; }
+    console.log(`[ReviewGrid] gridCols calculé: ${gridCols}`); 
+    let numRows = 0;
+    if (gridInfo && typeof gridInfo.rows === 'number' && gridInfo.rows > 0) { numRows = gridInfo.rows; }
+    else if (detections && detections.length > 0 && gridCols > 0) { numRows = Math.ceil(detections.length / gridCols); }
+    else if (detections && detections.length === 0) { numRows = 0; }
+    console.log(`[ReviewGrid] numRows calculé: ${numRows}`);
 
-    // Créer une map pour accéder rapidement aux détections par position
+    // Essayer de lire la série MAINTENANT
+    console.log("[ReviewGrid] Tentative lecture seriesId AVANT innerHTML=''");
+    console.log("[ReviewGrid] Inspecting resultData object (avant vidage):", resultData);
+    console.log("[ReviewGrid] Value of resultData.major_series (avant vidage):", resultData?.major_series);
+    const seriesId = resultData.major_series;
+    console.log(`[ReviewGrid] seriesId lue (avant vidage): ${seriesId}`);
+
+    // Vérifier si on peut continuer
+    if (numRows === 0 || gridCols === 0) {
+        console.log("[ReviewGrid] Aucune ligne ou colonne valide, affichage message \'pas de grille\'.");
+        loadingReviewGridMsg.style.display = 'none';
+        noReviewGridFoundMsg.textContent = "Impossible de déterminer la structure de la grille.";
+        noReviewGridFoundMsg.style.display = 'block';
+        // Vider la grille ici si elle n'est pas déjà vide
+        if (reviewDetectedCardsGrid.innerHTML !== '') reviewDetectedCardsGrid.innerHTML = '';
+        return;
+    }
+
+    // Préparer la map de détection
     const detectionMap = new Map();
     detections.forEach(det => {
         if (det.row !== undefined && det.col !== undefined && det.row >= 0 && det.col >= 0) {
             detectionMap.set(`${det.row}-${det.col}`, det);
         }
     });
+    
+    // Récupérer anchorInfo et offsetHeuristic une seule fois
+    const anchorInfo = resultData.anchor_info;
+    const offsetHeuristic = typeof resultData.offset_heuristic === 'number' ? resultData.offset_heuristic : 0;
+    const hasAnchor = anchorInfo && anchorInfo.status === "Trouvée" && typeof anchorInfo.number === 'number' && typeof anchorInfo.row === 'number' && typeof anchorInfo.col === 'number';
+
+    console.log(`[ReviewGrid] Prêt à créer grille ${numRows}x${gridCols}. Série: ${seriesId || 'Non détectée'}. Ancre: ${hasAnchor}. Offset: ${offsetHeuristic}`);
+
+    // === VIDAGE DE LA GRILLE DÉPLACÉ ICI ===
+    reviewDetectedCardsGrid.innerHTML = '';
+    reviewDetectedCardsGrid.style.gridTemplateColumns = `repeat(${gridCols}, 1fr)`;
+    // Cacher les messages maintenant qu'on va remplir
+    loadingReviewGridMsg.style.display = 'none'; 
+    noReviewGridFoundMsg.style.display = 'none'; 
 
     let slotsPopulated = 0;
-    if (numRows === 0) {
-        console.log("[ReviewGrid] Aucune ligne ou détection");
-        loadingReviewGridMsg.style.display = 'none';
-        noReviewGridFoundMsg.style.display = 'block';
-        return;
-    }
 
+    // Boucle pour peupler la grille
     for (let r = 0; r < numRows; r++) {
         for (let c = 0; c < gridCols; c++) {
-            const slotKey = `${imageIndex}-${r}-${c}`; // Clé unique pour ce slot dans cette image
-            const det = detectionMap.get(`${r}-${c}`);
             const slotClone = reviewGridSlotTemplate.content.cloneNode(true);
             const slotDiv = slotClone.querySelector('.review-grid-slot');
             const img = slotClone.querySelector('.review-card-img');
             const placeholder = slotClone.querySelector('.review-card-placeholder');
             const numberSpan = slotClone.querySelector('.review-card-number');
-            const manualBadge = slotClone.querySelector('.review-manual-badge');
 
-            let slotStatus = 'empty-inferred';
+            let slotStatus = 'empty-inferred'; // Statut par défaut si aucune détection à cet emplacement
             let cardKey = '';
-            let predictedNumStr = '';
-            let originalStatus = '';
+            let predictedNumStr = ''; // Numéro texte à afficher (placeholder ou badge)
+            let finalPredictedNumber = null; // AJOUT: Initialiser explicitement
+            slotDiv.title = `Emplacement vide (${r},${c})`; // Titre par défaut
 
+            // === AJOUT: Calcul numéro ancre D'ABORD ===
+            if (hasAnchor && seriesId) {
+                predictedNumStr = 'ERR';
+                try {
+                    const anchorNumOriginal = anchorInfo.number;
+                    const anchorR = anchorInfo.row;
+                    const anchorC = anchorInfo.col;
+                    if (typeof gridCols !== 'number' || gridCols <= 0) { throw new Error(`gridCols invalide: ${gridCols}`); }
+                    const expectedRelative = anchorNumOriginal + (r * gridCols + c) - (anchorR * gridCols + anchorC);
+                    finalPredictedNumber = expectedRelative + offsetHeuristic;
+                    if (typeof finalPredictedNumber === 'number' && !isNaN(finalPredictedNumber)) {
+                         predictedNumStr = String(finalPredictedNumber);
+                    } else {
+                         console.warn(`[ReviewGrid Slot ${r}-${c}] Calcul de finalPredictedNumber invalide:`, finalPredictedNumber);
+                         predictedNumStr = 'NaN';
+                    }
+                } catch (calcError) {
+                    console.error(`[ReviewGrid Slot ${r}-${c}] Erreur calcul numéro attendu:`, calcError);
+                    predictedNumStr = 'ERR';
+                }
+            } else {
+                 console.log(`[ReviewGrid Slot ${r}-${c}] Pas d'ancre ou de série pour calculer le numéro.`);
+                 predictedNumStr = '?'; // Garder '?' si pas d'ancre/série
+            }
+            // === FIN AJOUT ===
+
+            // Garder une copie du numéro calculé par l'ancre
+            const anchorPredictedNumStr = predictedNumStr;
+            const anchorFinalPredictedNumber = finalPredictedNumber;
+
+            const det = detectionMap.get(`${r}-${c}`);
             if (det) {
-                originalStatus = det.status || 'unknown';
-                slotStatus = originalStatus;
-                const predictedNumber = det.predicted_number;
+                 // Une détection existe pour ce slot
+                slotStatus = det.status || 'unknown';
+                const detectionPredictedNumber = det.predicted_number; // Numéro de la détection
                 const isCard = det.is_card;
-                predictedNumStr = predictedNumber != null ? String(predictedNumber) : '?';
-                placeholder.textContent = predictedNumStr;
 
-                const isPlausibleCard = isCard && 
-                                       slotStatus.includes("Présent") && 
-                                       !slotStatus.includes("Implausible") && 
-                                       predictedNumber != null && 
-                                       seriesId;
+                // Utiliser le numéro de l'ancre pour l'affichage principal
+                placeholder.textContent = anchorPredictedNumStr;
+
+                 // Déterminer si c'est une carte plausible à afficher
+                 // Utiliser le numéro de l'ancre pour la plausibilité et la clé
+                const isPlausibleCard = isCard &&
+                                        slotStatus.includes("Présent") &&
+                                        !slotStatus.includes("Implausible") &&
+                                        anchorFinalPredictedNumber != null && // Vérifier le numéro calculé via ANCRE
+                                        seriesId;
 
                 if (isPlausibleCard) {
                     slotStatus = 'present';
-                    cardKey = `${seriesId}-${predictedNumber}`;
-                    numberSpan.textContent = predictedNumStr;
+                    // Utiliser le numéro de l'ancre pour la clé
+                    cardKey = `${seriesId}-${anchorFinalPredictedNumber}`;
+                    slotDiv.dataset.cardKey = cardKey;
+                    // Afficher le numéro de l'ancre dans le badge
+                    numberSpan.textContent = anchorPredictedNumStr;
 
+                    // Optionnel : Vérifier si le numéro détecté correspond (pour log ou statut)
+                    if (detectionPredictedNumber != anchorFinalPredictedNumber) {
+                         console.warn(`[ReviewGrid Slot ${r}-${c}] Discordance numéro: Ancre=${anchorFinalPredictedNumber}, Détection=${detectionPredictedNumber}`);
+                         // On pourrait ajouter une classe CSS ou modifier le titre ici
+                    }
+
+                    // Essayer de trouver l'image officielle
                     const cardData = allCardsData[cardKey];
                     if (cardData && cardData.image_url) {
-                        img.onload = () => { img.style.display = 'block'; placeholder.style.display = 'none'; };
-                        img.onerror = () => { img.style.display = 'none'; placeholder.style.display = 'flex'; };
-                        img.src = cardData.image_url;
-                        img.alt = cardData.french_name || cardData.card_name || cardKey;
-                        slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte'} (${cardKey})`;
-                    } else {
-                        img.style.display = 'none';
-                        placeholder.style.display = 'flex';
-                        placeholder.textContent = predictedNumStr + ' (?)';
-                        slotDiv.title = `Carte ${cardKey} détectée mais info manquante`;
-                        slotStatus = 'present-no-data';
+                         console.log(`[ReviewGrid Slot ${r}-${c}] Carte ${cardKey} trouvée. URL: ${cardData.image_url}`);
+                         img.onload = () => { img.style.display = 'block'; placeholder.style.display = 'none'; };
+                         img.onerror = () => { console.error(`Erreur chargement image pour ${cardKey}`); img.style.display = 'none'; placeholder.style.display = 'flex'; placeholder.textContent = anchorPredictedNumStr + ' ERR';};
+                            img.src = cardData.image_url;
+                            img.alt = cardData.french_name || cardData.card_name || cardKey;
+                            slotDiv.title = `${cardData.french_name || cardData.card_name || 'Carte inconnue'} (${cardKey})`;
+                        } else {
+                         console.warn(`[ReviewGrid Slot ${r}-${c}] Carte ${cardKey} non trouvée ou sans image dans allCardsData.`);
+                         img.style.display = 'none'; placeholder.style.display = 'flex'; placeholder.textContent = anchorPredictedNumStr + ' (?)';
+                         slotDiv.title = `Carte ${cardKey} détectée mais info manquante`;
+                         slotStatus = 'present-no-data'; // Statut spécifique si besoin
                     }
                 } else if (isCard) {
-                    slotStatus = 'detected-issue';
-                    img.style.display = 'none';
-                    placeholder.style.display = 'flex';
-                    placeholder.textContent = predictedNumStr + ' !';
-                    numberSpan.textContent = predictedNumStr;
-                    slotDiv.title = `Problème détection (${det.status || '?'}) - ${predictedNumStr}`;
+                     // Détecté comme carte, mais pas plausible
+                     slotStatus = 'detected-issue';
+                     // Afficher le numéro de l'ancre avec un '!'
+                     placeholder.textContent = anchorPredictedNumStr + ' !';
+                     numberSpan.textContent = anchorPredictedNumStr; // Afficher numéro ancre quand même
+                     slotDiv.title = `Problème détection (${det.status || 'statut inconnu'}) - Attendu ${anchorPredictedNumStr}, Détecté ${detectionPredictedNumber ?? 'rien'}`;
                 } else {
-                    slotStatus = 'empty-slot';
-                    img.style.display = 'none';
-                    placeholder.style.display = 'flex';
-                    placeholder.textContent = predictedNumStr;
-                    numberSpan.textContent = '';
-                    slotDiv.title = `Emplacement vide (attendu ${predictedNumStr})`;
+                     // Détecté, mais PAS une carte (ex: slot vide)
+                     slotStatus = 'empty-slot';
+                     // Afficher le numéro de l'ancre dans le placeholder
+                     placeholder.textContent = anchorPredictedNumStr;
+                     numberSpan.textContent = '';
+                     slotDiv.title = `Emplacement vide détecté (attendu ${anchorPredictedNumStr})`;
                 }
+
             } else {
+                // Aucune détection pour ce slot (r, c) -> Vide inféré
                 slotStatus = 'empty-inferred';
-                img.style.display = 'none';
-                placeholder.style.display = 'flex';
-                placeholder.textContent = '';
+                // Afficher le numéro de l'ancre (la variable n'a pas été écrasée)
+                placeholder.textContent = anchorPredictedNumStr;
                 numberSpan.textContent = '';
-                slotDiv.title = `Emplacement vide (${r},${c})`;
+                slotDiv.title = `Emplacement vide (attendu ${anchorPredictedNumStr})`;
             }
 
-            // Vérifier s'il y a une modification manuelle pour ce slot
-            if (manuallyModifiedSlots.has(slotKey)) {
-                const manualMod = manuallyModifiedSlots.get(slotKey);
-                slotStatus = manualMod.status;
-                
-                if (slotStatus === 'manually-present') {
-                    cardKey = manualMod.cardKey;
-                    
-                    // Si l'image n'est pas déjà chargée correctement
-                    if (img.src !== manualMod.imageUrl) {
-                        img.src = manualMod.imageUrl;
-                        img.style.display = 'block';
-                        placeholder.style.display = 'none';
-                    }
-                    
-                    slotDiv.title = manualMod.title || `Manuellement marqué comme présent`;
-                } else { // manually-absent
-                    cardKey = '';
-                    img.style.display = 'none';
-                    placeholder.style.display = 'flex';
-                    placeholder.textContent = 'X';
-                    slotDiv.title = `Manuellement marqué comme absent`;
-                }
-                
-                // Afficher le badge de modification
-                manualBadge.style.display = 'block';
-            }
-
-            // Stocker les données essentielles dans le slot
+            // Appliquer la classe CSS basée sur le statut final
+            slotDiv.className = 'review-grid-slot'; // Reset classes
+            slotDiv.classList.add(`status-${slotStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+            slotDiv.dataset.status = slotStatus; // Stocker le statut calculé
+            slotDiv.dataset.originalStatus = slotStatus; // Statut initial avant clic
+            // Stocker le numéro calculé via l'ancre dans le dataset
+            slotDiv.dataset.predictedNumber = anchorFinalPredictedNumber != null ? String(anchorFinalPredictedNumber) : '';
+            slotDiv.dataset.seriesId = seriesId || ''; // Stocker la série si elle existe
             slotDiv.dataset.row = r;
             slotDiv.dataset.col = c;
             slotDiv.dataset.imageIndex = imageIndex;
-            slotDiv.dataset.cardKey = cardKey;
-            slotDiv.dataset.status = slotStatus;
-            slotDiv.dataset.originalStatus = originalStatus;
-            slotDiv.dataset.predictedNumber = predictedNumStr;
-            slotDiv.dataset.slotKey = slotKey;
-            slotDiv.dataset.seriesId = seriesId;
+            // cardKey est déjà défini si plausibleCard
 
-            // Appliquer la classe CSS basée sur le statut
-            slotDiv.className = 'review-grid-slot';
-            slotDiv.classList.add(`status-${slotStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
-
-            // Ajouter le gestionnaire de clic simple pour basculer l'état
             slotDiv.addEventListener('click', handleSlotToggle);
 
             reviewDetectedCardsGrid.appendChild(slotClone);
@@ -1522,9 +1861,9 @@ function populateReviewDetectedCardsGrid(imageIndex, resultData) {
         }
     }
 
-    loadingReviewGridMsg.style.display = 'none';
-    noReviewGridFoundMsg.style.display = (slotsPopulated === 0) ? 'block' : 'none';
-    console.log(`[ReviewGrid] ${slotsPopulated} slots ajoutés à la grille.`);
+    loadingReviewGridMsg.style.display = 'none'; // Cacher chargement
+    noReviewGridFoundMsg.style.display = (slotsPopulated === 0) ? 'block' : 'none'; // Afficher si rien n'a été ajouté
+    console.log(`[ReviewGrid] Fin peuplement. ${slotsPopulated} slots ajoutés à la grille.`);
 }
 
 // Fonction simplifiée pour basculer l'état d'un slot

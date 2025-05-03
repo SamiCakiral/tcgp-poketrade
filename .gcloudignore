@@ -28,3 +28,4 @@ _OLD/
 *.pywz
 *.pyzw
 
+card_detector/resnet50_embedding.tflite

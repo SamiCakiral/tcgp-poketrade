@@ -12,13 +12,19 @@
             <div class="filter-buttons">
                 <button class="filter-btn active" data-filter="all">Tous les échanges</button>
                 <button class="filter-btn" data-filter="same-set">Même série</button>
-                <button class="filter-btn" data-filter="same-rarity">Même rareté</button>
                 <button class="filter-btn" data-filter="best-match">Meilleurs matchs</button>
             </div>
         </div>
         
+        <div class="user-select-group">
+            <label for="select-trade-user">Échanger avec :</label>
+            <select id="select-trade-user">
+                <option value="all" selected>Tous les utilisateurs</option>
+            </select>
+        </div>
+        
         <div class="sort-group">
-            <label>Trier par:</label>
+            <label for="sort-trades">Trier par:</label>
             <select id="sort-trades">
                 <option value="relevance">Pertinence</option>
                 <option value="rarity-desc">Rareté (décroissante)</option>
@@ -125,13 +131,14 @@
             display: flex;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 15px;
+            gap: 20px;
+            align-items: center;
         }
         
-        .filter-group, .sort-group {
+        .filter-group, .sort-group, .user-select-group {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
         }
         
         .filter-buttons {
@@ -404,12 +411,24 @@
                 width: 100%;
             }
         }
+
+        /* Style spécifique pour le select utilisateur si besoin */
+        #select-trade-user {
+            padding: 8px 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            font-family: inherit;
+            min-width: 180px;
+        }
     </style>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Chargement des échanges potentiels
             loadPotentialTrades();
+            // NOUVEAU : Charger les utilisateurs pour le sélecteur
+            loadUsersForTradeSelect();
             
             // Gestion des filtres
             document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -420,26 +439,43 @@
                     
                     // Appliquer le filtre
                     const filter = this.getAttribute('data-filter');
-                    loadPotentialTrades(filter, document.getElementById('sort-trades').value);
+                    // NOUVEAU: Passer l'utilisateur sélectionné
+                    const selectedUser = document.getElementById('select-trade-user').value;
+                    loadPotentialTrades(filter, document.getElementById('sort-trades').value, selectedUser);
                 });
             });
             
             // Gestion du tri
             document.getElementById('sort-trades').addEventListener('change', function() {
                 const activeFilter = document.querySelector('.filter-btn.active').getAttribute('data-filter');
-                loadPotentialTrades(activeFilter, this.value);
+                // NOUVEAU: Passer l'utilisateur sélectionné
+                const selectedUser = document.getElementById('select-trade-user').value;
+                loadPotentialTrades(activeFilter, this.value, selectedUser);
+            });
+            
+            // NOUVEAU : Gestion de la sélection utilisateur
+            document.getElementById('select-trade-user').addEventListener('change', function() {
+                const activeFilter = document.querySelector('.filter-btn.active').getAttribute('data-filter');
+                const activeSort = document.getElementById('sort-trades').value;
+                loadPotentialTrades(activeFilter, activeSort, this.value);
             });
             
             // Gestion des modales
             setupModalHandlers();
         });
         
-        function loadPotentialTrades(filter = 'all', sort = 'relevance') {
+        function loadPotentialTrades(filter = 'all', sort = 'relevance', targetUserId = 'all') {
             const tradesContainer = document.querySelector('.trades-container');
             tradesContainer.innerHTML = '<div class="loading-trades">Recherche des échanges possibles...</div>';
             
+            // Modifier l'URL pour inclure le user_id si nécessaire
+            let apiUrl = `/api/potential_trades?filter=${filter}&sort=${sort}`;
+            if (targetUserId !== 'all') {
+                apiUrl += `&user_id=${targetUserId}`;
+            }
+            
             // Faire une requête AJAX pour obtenir les échanges potentiels
-            fetch(`/api/potential_trades?filter=${filter}&sort=${sort}`)
+            fetch(apiUrl)
                 .then(response => response.json())
                 .then(data => {
                     tradesContainer.innerHTML = '';
@@ -610,7 +646,8 @@
                     alert('Proposition d\'échange envoyée avec succès!');
                     // Recharger les échanges pour mettre à jour la liste
                     const activeFilter = document.querySelector('.filter-btn.active').getAttribute('data-filter');
-                    loadPotentialTrades(activeFilter, document.getElementById('sort-trades').value);
+                    const selectedUser = document.getElementById('select-trade-user').value;
+                    loadPotentialTrades(activeFilter, document.getElementById('sort-trades').value, selectedUser);
                 } else {
                     alert('Erreur: ' + data.message);
                 }
@@ -625,6 +662,30 @@
             // Rediriger vers une page de messagerie ou ouvrir une modale de contact
             alert('Fonctionnalité de contact à implémenter');
             // window.location.href = `/messages/new?user_id=${userId}`;
+        }
+
+        // NOUVELLE FONCTION : Charger les utilisateurs dans le select
+        function loadUsersForTradeSelect() {
+            const selectElement = document.getElementById('select-trade-user');
+            fetch('/api/trade_partners')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.users && data.users.length > 0) {
+                        data.users.forEach(user => {
+                            const option = document.createElement('option');
+                            option.value = user.id;
+                            option.textContent = user.name;
+                            selectElement.appendChild(option);
+                        });
+                    } else {
+                        // Optionnel: désactiver le select si aucun partenaire
+                        // selectElement.disabled = true;
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors du chargement des partenaires d\'échange:', error);
+                    // Optionnel: afficher un message d'erreur
+                });
         }
     </script>
 {% endblock %} 

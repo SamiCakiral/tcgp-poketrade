@@ -65,6 +65,7 @@
                 </div>
                 <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
                 <div class="card-number-badge">{{ card.card_number }}</div>
+                {% if card.rarity %}<div class="card-rarity-badge">{{ card.rarity }}</div>{% endif %}
 
                 {% if is_owned and extra_dict[card_key] > 1 %}
                 <div class="card-quantity">×{{ extra_dict[card_key] }}</div>
@@ -164,6 +165,7 @@
                 <p id="modal-card-original-name" class="card-original-name"></p>
                 <p>Numéro: <span id="modal-card-number"></span></p>
                 <p>Série: <span id="modal-card-set"></span></p>
+                <p id="modal-card-rarity-container" style="display: none;">Rareté: <span id="modal-card-rarity"></span></p>
                 <div id="modal-card-quantity-container">
                     <p>Quantité: <span id="modal-card-quantity"></span></p>
                 </div>
@@ -213,6 +215,7 @@
                 </div>
                 <div class="card-name-tag">{{ card.french_name or card.card_name }}</div>
                 <div class="card-number-badge">{{ card.card_number }}</div>
+                {% if card.rarity %}<div class="card-rarity-badge">{{ card.rarity }}</div>{% endif %}
 
                 {% if is_wanted %}
                 <div class="card-wanted-badge">
@@ -422,6 +425,19 @@
         font-size: 0.7rem;
         font-weight: 600;
         box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        z-index: 5;
+    }
+
+    .card-rarity-badge {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        background: rgba(0, 0, 0, 0.7);
+        color: #e2e8f0;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 500;
         z-index: 5;
     }
 
@@ -1110,6 +1126,14 @@
                                 document.getElementById('modal-card-quantity-container').style.display = 'none';
                             }
 
+                            // NOUVEAU : Afficher la rareté si elle existe
+                            if (data.rarity) {
+                                document.getElementById('modal-card-rarity').textContent = data.rarity;
+                                document.getElementById('modal-card-rarity-container').style.display = 'block';
+                            } else {
+                                document.getElementById('modal-card-rarity-container').style.display = 'none';
+                            }
+
                             // Nettoyer tout affichage précédent des propriétaires
                             const existingOwners = document.querySelector('.card-owners');
                             if (existingOwners) {
@@ -1352,6 +1376,80 @@
                     alert('Erreur: ' + data.message);
                 }
             });
+    });
+
+    // NOUVEAU : Gestionnaire pour "Obtenue! Ajouter à ma collection"
+    document.getElementById('convert-to-collection').addEventListener('click', function() {
+        const setId = document.getElementById('modal-card-set').textContent;
+        const cardNumber = document.getElementById('modal-card-number').textContent;
+
+        fetch('/convert_to_collection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ set_id: setId, card_number: cardNumber }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('card-modal').style.display = 'none';
+                window.location.reload();
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        });
+    });
+
+    // NOUVEAU : Gestionnaire pour "Supprimer" (carte possédée)
+    document.getElementById('remove-card').addEventListener('click', function() {
+        const setId = document.getElementById('modal-card-set').textContent;
+        const cardNumber = document.getElementById('modal-card-number').textContent;
+
+        if (confirm(`Êtes-vous sûr de vouloir supprimer la carte ${setId}-${cardNumber} de votre collection ?`)) {
+            fetch('/remove_card', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ set_id: setId, card_number: cardNumber, is_wanted: false }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('card-modal').style.display = 'none';
+                    window.location.reload();
+                } else {
+                    alert('Erreur: ' + data.message);
+                }
+            });
+        }
+    });
+
+    // NOUVEAU : Gestionnaire pour "Retirer des recherches"
+    document.getElementById('remove-from-wanted').addEventListener('click', function() {
+        const setId = document.getElementById('modal-card-set').textContent;
+        const cardNumber = document.getElementById('modal-card-number').textContent;
+
+        if (confirm(`Êtes-vous sûr de vouloir retirer la carte ${setId}-${cardNumber} de vos recherches ?`)) {
+            fetch('/remove_card', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                // Note: l'endpoint /remove_card gère les deux cas (wanted/extra)
+                body: JSON.stringify({ set_id: setId, card_number: cardNumber, is_wanted: true }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('card-modal').style.display = 'none';
+                    window.location.reload();
+                } else {
+                    alert('Erreur: ' + data.message);
+                }
+            });
+        }
     });
 
     // 4. Gestionnaires pour la suppression de compte

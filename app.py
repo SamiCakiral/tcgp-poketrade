@@ -766,125 +766,169 @@ def get_potential_trades():
     # Récupérer les paramètres de filtre et de tri
     filter_type = request.args.get('filter', 'all')
     sort_type = request.args.get('sort', 'relevance')
-    
+    # NOUVEAU : Récupérer l'ID de l'utilisateur cible pour filtrer
+    target_user_id = request.args.get('user_id', 'all')
+
     # Récupérer l'utilisateur courant
     user_id = session.get('user_id')
-    
-    # Connexion à la base de données
-    conn = sqlite3.connect('pokemon_cards.db')
-    conn.row_factory = sqlite3.Row  # Pour accéder aux colonnes par nom
-    cursor = conn.cursor()
-    
-    # 1. Récupérer les cartes recherchées par l'utilisateur
-    cursor.execute("""
-        SELECT c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity
-        FROM cards c
-        JOIN wanted_cards w ON c.set_id = w.set_id AND c.card_number = w.card_number
-        WHERE w.user_id = ?
-    """, (user_id,))
-    wanted_cards = [dict(row) for row in cursor.fetchall()]
-    
-    # 2. Récupérer les cartes en double des autres utilisateurs
-    cursor.execute("""
-        SELECT e.user_id as owner_id, c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity, u.name as owner_name
-        FROM extra_cards e
-        JOIN cards c ON e.set_id = c.set_id AND e.card_number = c.card_number
-        JOIN users u ON e.user_id = u.id
-        WHERE e.user_id != ? AND e.quantity > 1
-    """, (user_id,))
-    other_users_extras = [dict(row) for row in cursor.fetchall()]
-    
-    # 3. Récupérer les cartes en double de l'utilisateur courant
-    cursor.execute("""
-        SELECT c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity
-        FROM extra_cards e
-        JOIN cards c ON e.set_id = c.set_id AND e.card_number = c.card_number
-        WHERE e.user_id = ? AND e.quantity > 1
-    """, (user_id,))
-    user_extras = [dict(row) for row in cursor.fetchall()]
-    
-    # 4. Récupérer les cartes recherchées par les autres utilisateurs
-    cursor.execute("""
-        SELECT w.user_id as owner_id, c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity, u.name as owner_name
-        FROM wanted_cards w
-        JOIN cards c ON w.set_id = c.set_id AND w.card_number = c.card_number
-        JOIN users u ON w.user_id = u.id
-        WHERE w.user_id != ?
-    """, (user_id,))
-    other_users_wanted = [dict(row) for row in cursor.fetchall()]
-    
-    # Fermer la connexion à la base de données
-    conn.close()
-    
+
+    # MODIFIÉ: Utiliser la fonction get_db_connection
+    conn, _ = get_db_connection() # _ car on n'a pas besoin du db_path ici
+    # conn.row_factory = sqlite3.Row est déjà défini dans get_db_connection (supposé)
+    # Pas besoin de créer un curseur séparé
+
+    try:
+        # 1. Récupérer les cartes recherchées par l'utilisateur
+        # MODIFIÉ: Utiliser conn.execute et ne pas convertir en dict immédiatement
+        wanted_cards_rows = conn.execute("""
+            SELECT c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity
+            FROM cards c
+            JOIN wanted_cards w ON c.set_id = w.set_id AND c.card_number = w.card_number
+            WHERE w.user_id = ?
+        """, (user_id,)).fetchall()
+        wanted_cards = wanted_cards_rows # Les objets Row se comportent déjà comme des dicts
+
+        # 2. Récupérer les cartes en double des autres utilisateurs
+        # MODIFIÉ: Filtrer par target_user_id si nécessaire
+        other_extras_query = """
+            SELECT e.user_id as owner_id, c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity, u.name as owner_name
+            FROM extra_cards e
+            JOIN cards c ON e.set_id = c.set_id AND e.card_number = c.card_number
+            JOIN users u ON e.user_id = u.id
+            WHERE e.user_id != ? AND e.quantity > 1
+        """
+        params = [user_id]
+        if target_user_id != 'all':
+            other_extras_query += " AND e.user_id = ?"
+            params.append(target_user_id)
+
+        other_users_extras_rows = conn.execute(other_extras_query, params).fetchall()
+        other_users_extras = other_users_extras_rows
+
+        # 3. Récupérer les cartes en double de l'utilisateur courant
+        # MODIFIÉ: Utiliser conn.execute et ne pas convertir en dict immédiatement
+        user_extras_rows = conn.execute("""
+            SELECT c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity
+            FROM extra_cards e
+            JOIN cards c ON e.set_id = c.set_id AND e.card_number = c.card_number
+            WHERE e.user_id = ? AND e.quantity > 1
+        """, (user_id,)).fetchall()
+        user_extras = user_extras_rows
+
+        # 4. Récupérer les cartes recherchées par les autres utilisateurs
+        # MODIFIÉ: Filtrer par target_user_id si nécessaire
+        other_wanted_query = """
+            SELECT w.user_id as owner_id, c.id, c.set_id, c.card_number, c.card_name, c.french_name, c.image_url, c.rarity, u.name as owner_name
+            FROM wanted_cards w
+            JOIN cards c ON w.set_id = c.set_id AND w.card_number = c.card_number
+            JOIN users u ON w.user_id = u.id
+            WHERE w.user_id != ?
+        """
+        params_wanted = [user_id]
+        if target_user_id != 'all':
+            other_wanted_query += " AND w.user_id = ?"
+            params_wanted.append(target_user_id)
+
+        other_users_wanted_rows = conn.execute(other_wanted_query, params_wanted).fetchall()
+        other_users_wanted = other_users_wanted_rows
+
+    finally:
+        # MODIFIÉ: Fermer la connexion obtenue via get_db_connection
+        conn.close()
+
     # Trouver les échanges potentiels
     potential_trades = []
-    
-    # Pour chaque carte recherchée par l'utilisateur
+
+    # Pour chaque carte recherchée par l'utilisateur (Row object)
     for wanted_card in wanted_cards:
-        # Trouver les utilisateurs qui ont cette carte en double
+        # Trouver les utilisateurs qui ont cette carte en double (Row object)
         for extra_card in other_users_extras:
+            # Comparaison via ['id'] car ce sont des objets Row
+            # (Déjà filtré par target_user_id si nécessaire au niveau de la requête SQL)
             if extra_card['id'] == wanted_card['id']:
-                # Pour chaque carte en double de l'utilisateur
+                # Pour chaque carte en double de l'utilisateur (Row object)
                 for user_extra in user_extras:
-                    # Vérifier si l'autre utilisateur recherche cette carte
+                    # Vérifier si l'autre utilisateur recherche cette carte (Row object)
                     for other_wanted in other_users_wanted:
+                         # Comparaison via ['id'] et ['owner_id'] car ce sont des objets Row
+                         # (Déjà filtré par target_user_id si nécessaire au niveau de la requête SQL)
                         if other_wanted['id'] == user_extra['id'] and other_wanted['owner_id'] == extra_card['owner_id']:
-                            # Calculer la qualité du match
-                            match_quality = calculate_match_quality(wanted_card, user_extra, extra_card, other_wanted)
-                            
-                            # Créer l'échange potentiel
-                            trade = {
-                                'your_card': user_extra,
-                                'their_card': extra_card,
-                                'other_user': {
-                                    'id': extra_card['owner_id'],
-                                    'username': extra_card['owner_name']
-                                },
-                                'match_quality': match_quality
-                            }
-                            
-                            potential_trades.append(trade)
-    
+                            # --- DEBUGGING START ---
+                            print(f"--- Potential Match Found Before Rarity Check ---")
+                            print(f"My Extra: {user_extra['set_id']}-{user_extra['card_number']} (Rarity: '{user_extra['rarity']}')")
+                            print(f"Their Extra: {extra_card['set_id']}-{extra_card['card_number']} (Rarity: '{extra_card['rarity']}')")
+                            print(f"Owner: {extra_card['owner_name']}")
+                            print(f"Checking Rarity: '{user_extra['rarity']}' == '{extra_card['rarity']}' -> {user_extra['rarity'] == extra_card['rarity']}")
+                            # --- DEBUGGING END ---
+
+                            # ---> ICI : Vérification de la rareté <---
+                            # Est-ce que la rareté de MA carte (user_extra) est la même que celle de SA carte (extra_card) ?
+                            if user_extra['rarity'] == extra_card['rarity']:
+                                # Si oui, calculer la qualité et ajouter l'échange
+                                match_quality = calculate_match_quality(user_extra, extra_card)
+
+                                # Créer l'échange potentiel en accédant aux colonnes via ['...']
+                                # Convertir explicitement en dict pour le JSON final
+                                trade = {
+                                    'your_card': dict(user_extra), # Convertir en dict
+                                    'their_card': dict(extra_card), # Convertir en dict
+                                    'other_user': {
+                                        'id': extra_card['owner_id'],
+                                        'username': extra_card['owner_name']
+                                    },
+                                    'match_quality': match_quality
+                                }
+
+                                potential_trades.append(trade)
+
+    # --- DEBUGGING: Check list before filtering ---
+    print(f"--- Final potential_trades list BEFORE filtering (Count: {len(potential_trades)}) ---")
+    # print(potential_trades) # Uncomment carefully if needed, might be long
+
     # Appliquer les filtres
     filtered_trades = filter_trades(potential_trades, filter_type)
-    
+
+    # --- DEBUGGING: Check list after filtering ---
+    print(f"--- Trade list AFTER filtering (Count: {len(filtered_trades)}) ---")
+    # print(filtered_trades)
+
     # Appliquer le tri
     sorted_trades = sort_trades(filtered_trades, sort_type)
-    
+
+    # --- DEBUGGING: Check list after sorting ---
+    print(f"--- Trade list AFTER sorting (Count: {len(sorted_trades)}) ---")
+    # print(sorted_trades)
+
     # Renvoyer les résultats
     return jsonify({
         'success': True,
         'trades': sorted_trades
     })
 
-def calculate_match_quality(wanted_card, user_extra, extra_card, other_wanted):
+def calculate_match_quality(user_extra_card, their_extra_card):
     # Vérifier si les cartes sont de la même série
-    same_set = wanted_card['set_id'] == user_extra['set_id']
-    
-    # Vérifier si les cartes sont de même rareté
-    same_rarity = wanted_card['rarity'] == user_extra['rarity']
-    
+    # Note: On compare la carte de l'utilisateur (user_extra_card)
+    # avec la carte de l'autre (their_extra_card)
+    same_set = user_extra_card['set_id'] == their_extra_card['set_id']
+
+    # La rareté est déjà garantie d'être la même par la logique précédente
     # Calculer la qualité du match
-    if same_set and same_rarity:
-        return 'Excellent'
-    elif same_rarity:
-        return 'Good'
+    if same_set:
+        return 'Excellent' # Même série et même rareté (implicite)
     else:
-        return 'Fair'
+        return 'Good' # Même rareté (implicite) mais séries différentes
 
 def filter_trades(trades, filter_type):
     if filter_type == 'all':
         return trades
-    
+
     filtered = []
     for trade in trades:
         if filter_type == 'same-set' and trade['your_card']['set_id'] == trade['their_card']['set_id']:
             filtered.append(trade)
-        elif filter_type == 'same-rarity' and trade['your_card']['rarity'] == trade['their_card']['rarity']:
-            filtered.append(trade)
         elif filter_type == 'best-match' and trade['match_quality'] == 'Excellent':
             filtered.append(trade)
-    
+
     return filtered
 
 def sort_trades(trades, sort_type):
@@ -1093,90 +1137,6 @@ def pokedex_analyzer_view():
     """Affiche la page de l'assistant d'analyse Pokédex IA."""
     return render_template('pokedex_analyzer.html')
 
-@app.route('/api/aggregate_analysis_results', methods=['POST'])
-@login_required
-def api_aggregate_analysis_results():
-    raw_results = request.json.get('results', [])
-    if not raw_results:
-        return jsonify(success=False, message="Aucun résultat d'analyse fourni.")
-
-    all_series_votes = Counter()
-    detected_cards_raw = defaultdict(list) # Clé: "SERIE-NUM", Valeur: liste des détections correspondantes
-    aggregated_errors = []
-    detected_series_ids_set = set() # Pour stocker les IDs des séries détectées
-
-    # Première passe: voter pour la série et collecter les détections valides
-    for single_result_data in raw_results:
-        if not single_result_data or not single_result_data.get('success') or not single_result_data.get('result'):
-             error_msg = single_result_data.get('result', {}).get('error', 'Résultat individuel invalide ou manquant')
-             filename = single_result_data.get('result', {}).get('filename', 'Fichier inconnu')
-             aggregated_errors.append(f"{filename}: {error_msg}")
-             continue # Passer au résultat suivant
-
-        result = single_result_data['result']
-        if result.get("error"): # Erreur logique DANS l'analyseur pour ce fichier
-            aggregated_errors.append(f"{result.get('filename', 'Fichier inconnu')}: {result['error']}")
-            # On pourrait choisir de ne pas considérer les détections de ce fichier
-
-        anchor_info = result.get("anchor_info", {})
-        detections = result.get("detections", [])
-
-        if anchor_info.get("status") == "Trouvée":
-            major_series_img = anchor_info.get("major_series")
-            if major_series_img:
-                all_series_votes[major_series_img] += 1
-                detected_series_ids_set.add(major_series_img) # Ajouter la série détectée dans cette image
-                # Collecter les détections présentes et plausibles
-                for det in detections:
-                    predicted_number = det.get("predicted_number")
-                    status = det.get("status", "Erreur Status")
-                    is_plausible = "Implausible" not in status and predicted_number is not None
-
-                    # MODIFIÉ : On collecte toutes les cartes détectées valides, sans filtrer par série ici
-                    if det.get("is_card") and "Présent" in status and is_plausible and predicted_number is not None:
-                        card_key = f"{major_series_img}-{predicted_number}"
-                        detected_cards_raw[card_key].append(det) # Garder la clé avec sa série d'origine
-        else: # Ne pas ajouter d'erreur si juste pas d'ancre, c'est géré par le manque de vote
-             # aggregated_errors.append(f"Pas d'ancre trouvée pour {filename}")
-             pass
-
-
-    # MODIFIÉ : Ne plus déterminer UNE seule série principale pour filtrer
-    # overall_major_series = all_series_votes.most_common(1)[0][0] if all_series_votes else None
-    # present_card_keys = set()
-
-    # if overall_major_series:
-    #     print(f"Agrégation: Série principale retenue: {overall_major_series}")
-    #     for card_key, detections_list in detected_cards_raw.items():
-    #         if card_key.startswith(f"{overall_major_series}-"):
-    #             present_card_keys.add(card_key)
-    # else:
-    #     aggregated_errors.append("Impossible de déterminer une série principale fiable.") # Garder l'info si aucune ancre trouvée
-
-    # Utiliser directement toutes les clés détectées
-    final_present_keys_set = set(detected_cards_raw.keys())
-    final_present_keys_list = sorted(list(final_present_keys_set))
-
-    # Trier les séries détectées par ID (ou par vote si on préfère un ordre)
-    final_detected_series_ids = sorted(list(detected_series_ids_set))
-    # Ou trier par vote: final_detected_series_ids = [s[0] for s in all_series_votes.most_common()]
-
-    # Ajouter un warning si aucune série n'a été détectée du tout
-    if not final_detected_series_ids:
-         aggregated_errors.append("Aucune série n'a pu être identifiée dans les images fournies.")
-
-
-    print(f"Agrégation: Séries détectées: {final_detected_series_ids}")
-    print(f"Agrégation: Cartes présentes détectées (toutes séries): {len(final_present_keys_list)}")
-
-    return jsonify(
-        success=True, # L'agrégation a réussi (même si pas de détection ou erreurs individuelles)
-        # major_series=overall_major_series, # Peut être utile pour info? Ou supprimer. Gardons pour l'instant.
-        detected_series_ids=final_detected_series_ids, # Liste des IDs des séries où des cartes ont été vues
-        present_card_keys=final_present_keys_list, # Liste de toutes les clés "SERIE-NUM" détectées
-        errors=aggregated_errors
-    )
-
 @app.route('/api/update_collection_from_scan', methods=['POST'])
 @login_required
 def api_update_collection_from_scan():
@@ -1287,6 +1247,51 @@ def api_update_collection_from_scan():
         return jsonify(success=False, message=f"Erreur serveur: {str(e)}", errors=update_errors), 500
     finally:
         conn.close()
+
+# NOUVELLE ROUTE pour lister les partenaires d'échange potentiels
+@app.route('/api/trade_partners')
+@login_required
+def get_trade_partners():
+    user_id = session['user_id']
+    conn, _ = get_db_connection()
+    partners = []
+    try:
+        # Trouver les utilisateurs qui ont des cartes que JE VEUX
+        partners_having_my_wants = conn.execute("""
+            SELECT DISTINCT u.id, u.name
+            FROM users u
+            JOIN extra_cards e ON u.id = e.user_id
+            JOIN wanted_cards w ON e.set_id = w.set_id AND e.card_number = w.card_number
+            WHERE w.user_id = ? AND e.user_id != ?
+        """, (user_id, user_id)).fetchall()
+
+        # Trouver les utilisateurs qui veulent des cartes que J'AI EN DOUBLE
+        partners_wanting_my_extras = conn.execute("""
+            SELECT DISTINCT u.id, u.name
+            FROM users u
+            JOIN wanted_cards w ON u.id = w.user_id
+            JOIN extra_cards e ON w.set_id = e.set_id AND w.card_number = e.card_number
+            WHERE e.user_id = ? AND w.user_id != ? AND e.quantity > 1
+        """, (user_id, user_id)).fetchall()
+
+        # Combiner et dédupliquer les partenaires
+        partner_ids = set()
+        for row in partners_having_my_wants:
+            if row['id'] not in partner_ids:
+                partners.append({'id': row['id'], 'name': row['name']})
+                partner_ids.add(row['id'])
+        for row in partners_wanting_my_extras:
+             if row['id'] not in partner_ids:
+                partners.append({'id': row['id'], 'name': row['name']})
+                partner_ids.add(row['id'])
+
+        # Trier par nom
+        partners.sort(key=lambda x: x['name'])
+
+    finally:
+        conn.close()
+
+    return jsonify({'users': partners})
 
 if __name__ == '__main__':
     # Assure-toi d'avoir init_db() appelé quelque part avant si nécessaire

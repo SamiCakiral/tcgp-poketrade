@@ -29,6 +29,7 @@
             <div class="preview-content" style="display: none;">
                 <h3 id="preview-title"></h3>
                 <p id="preview-original-name" class="card-original-name"></p>
+                <p id="preview-rarity-container" style="display: none;">Rareté: <span id="preview-rarity"></span></p>
                 <div class="card-image">
                     <img id="preview-image" src="" alt="Aperçu de la carte">
                 </div>
@@ -114,6 +115,8 @@
             const previewTitle = document.getElementById('preview-title');
             const previewOriginalName = document.getElementById('preview-original-name');
             const previewImage = document.getElementById('preview-image');
+            const previewRarityContainer = document.getElementById('preview-rarity-container');
+            const previewRarity = document.getElementById('preview-rarity');
             
             // Fonction pour mettre à jour l'aperçu
             function updatePreview() {
@@ -139,6 +142,14 @@
                                 } else {
                                     previewOriginalName.style.display = 'none';
                                 }
+
+                                // NOUVEAU : Mettre à jour la rareté
+                                if (data.rarity) {
+                                    previewRarity.textContent = data.rarity;
+                                    previewRarityContainer.style.display = 'block';
+                                } else {
+                                    previewRarityContainer.style.display = 'none';
+                                }
                                 
                                 // Mettre à jour l'image
                                 if (data.image_url) {
@@ -151,6 +162,8 @@
                                 previewPlaceholder.style.display = 'block';
                                 previewContent.style.display = 'none';
                                 previewPlaceholder.innerHTML = '<p>Carte non trouvée</p>';
+                                // NOUVEAU : Cacher la rareté si carte non trouvée
+                                previewRarityContainer.style.display = 'none';
                             }
                         })
                         .catch(error => {
@@ -163,6 +176,8 @@
                     previewPlaceholder.style.display = 'block';
                     previewContent.style.display = 'none';
                     previewPlaceholder.innerHTML = '<p>Entrez un numéro de série et de carte pour voir l\'aperçu</p>';
+                    // NOUVEAU : Cacher la rareté si champs vides
+                    previewRarityContainer.style.display = 'none';
                 }
             }
             
